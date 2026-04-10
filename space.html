@@ -139,7 +139,7 @@
   let reconnectAttempts = 0;
   const MAX_RECONNECT = 8;
   let hasPlayedDoorbell = false;
-  let remoteStreamReceived = false;   // Prevent duplicate remote video
+  let remotePeerId = null;           // Track the other broadcaster's ID to prevent duplicates
 
   const doorbell = new Audio("https://www.soundjay.com/door_c2026/doorbell-6.mp3");
 
@@ -215,7 +215,9 @@
         ]
       });
 
-      webConnect.getMyId((attr) => { myConnectId = attr.connectId; });
+      webConnect.getMyId((attr) => {
+        myConnectId = attr.connectId;
+      });
 
       webConnect.onConnect(async (attr) => {
         updateStats();
@@ -230,17 +232,21 @@
         }
       });
 
-      // Prevent duplicate remote video of the other broadcaster
+      // FIXED: Prevent duplicate remote video streams
       webConnect.onStreaming((stream, attr) => {
-        if (attr.connectId === myConnectId || remoteStreamReceived) return;
+        if (attr.connectId === myConnectId) return;                    // Ignore own stream
+        if (remotePeerId && remotePeerId !== attr.connectId) return;   // Ignore if different peer
+        if (remotePeerId === attr.connectId) return;                   // Already received from this peer
 
-        remoteStreamReceived = true;
+        remotePeerId = attr.connectId;
 
+        // Remove waiting placeholder
         const waiting = document.getElementById("waitingWrapper");
         if (waiting) waiting.remove();
 
         createVideoElement(stream, "Other Broadcaster");
 
+        // Play doorbell only once
         if (!hasPlayedDoorbell) {
           hasPlayedDoorbell = true;
           doorbell.currentTime = 0;
@@ -256,7 +262,7 @@
     }
   }
 
-  // Auto start as Broadcaster A
+  // Auto start as Broadcaster A on first tab
   async function autoStartBroadcasterA() {
     try {
       localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
@@ -274,7 +280,7 @@
     } catch (err) {
       console.error(err);
       setStatus("❌ Camera access denied", "full");
-      document.getElementById("videoGrid").innerHTML = `<div style="color:#ff4757; text-align:center; padding:40px; font-size:1.2rem;">Camera access denied.<br>Please allow access and refresh the page.</div>`;
+      document.getElementById("videoGrid").innerHTML = `<div style="color:#ff4757; text-align:center; padding:40px; font-size:1.2rem;">Camera access denied.<br>Please allow access and refresh.</div>`;
     }
   }
 
@@ -290,7 +296,7 @@
 
     myRole = null;
     hasPlayedDoorbell = false;
-    remoteStreamReceived = false;
+    remotePeerId = null;
     reconnectAttempts = 0;
   }
 
@@ -303,7 +309,7 @@
     setStatus("Room is full • Only 2 broadcasters allowed", "full");
   }
 
-  // Mute buttons
+  // Mute A
   let mutedA = false;
   document.getElementById("muteMicABtn").onclick = () => {
     if (!localStreamA) return;
@@ -330,20 +336,20 @@
 
   window.addEventListener("beforeunload", () => { if (webConnect) webConnect.Disconnect(); });
 
-  // Start the app
+  // Start the app - First visitor auto starts, others see full
   async function startApp() {
     setTimeout(async () => {
-      if (document.getElementById("videoGrid").children.length === 0) {
+      if (!myRole) {
         await autoStartBroadcasterA();
       } else {
         showRoomFull();
       }
-    }, 600);
+    }, 800);
   }
 
   startApp();
 
-  console.log("%cFannalo Broadcast - Fixed Duplicate Remote Video", "color:#ff6b6b; font-weight:700");
+  console.log("%cFannalo Broadcast - Duplicate Video Fixed on Both Tabs", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

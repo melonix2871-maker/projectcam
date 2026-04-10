@@ -98,6 +98,7 @@
 
     if (isOwn) {
       const controls = wrapper.querySelector(".video-controls");
+
       controls.innerHTML = `
         <button class="btn-small toggle-video">📹 ON</button>
         <button class="btn-small toggle-audio">🎤 ON</button>
@@ -192,7 +193,7 @@
     document.getElementById("nodeRoleStat").textContent = "Host";
 
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    createVideo(localStream, "You (Host)", true, true);
+    createVideo(localStream, "You (Host)", true, true);   // isOwn = true
 
     showWaiting();
     document.getElementById("shareBox").style.display = "block";

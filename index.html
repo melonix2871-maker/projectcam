@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Video Chat - P2P</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #fff;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        .video-section {
+            flex: 4;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            background: #1a1a1a;
+            gap: 10px;
+        }
+        .chat-section {
+            flex: 6;
+            display: flex;
+            flex-direction: column;
+            background: #222;
+            border-left: 2px solid #333;
+        }
+        video {
+            width: 100%;
+            background: #000;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+        .local-video {
+            height: 45%;
+        }
+        .remote-video {
+            height: 55%;
+        }
+        .name-label {
+            position: absolute;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            margin: 8px;
+        }
+        .video-wrapper {
+            position: relative;
+        }
+        .chat-header {
+            padding: 15px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            font-weight: bold;
+        }
+        .messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        .message.local {
+            align-self: flex-end;
+            background: #007bff;
+            color: white;
+        }
+        .message.remote {
+            align-self: flex-start;
+            background: #333;
+        }
+        .chat-input {
+            padding: 15px;
+            background: #1a1a1a;
+            display: flex;
+            gap: 10px;
+            border-top: 1px solid #333;
+        }
+        input {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 25px;
+            background: #333;
+            color: white;
+        }
+        button {
+            padding: 12px 24px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+            background: #222;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left: Videos -->
+        <div class="video-section">
+            <div class="video-wrapper">
+                <div class="name-label" id="local-name">You (cam1)</div>
+                <video id="localVideo" class="local-video" autoplay muted playsinline></video>
+            </div>
+            <div class="video-wrapper">
+                <div class="name-label" id="remote-name">Stranger (cam2)</div>
+                <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
+            </div>
+            <div class="status" id="status">Connecting...</div>
+        </div>
+
+        <!-- Right: Chat -->
+        <div class="chat-section">
+            <div class="chat-header">P2P Chat</div>
+            <div class="messages" id="messages"></div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Type a message...">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room') || 'default-room-' + Math.random().toString(36).substr(2, 9);
+        let cam1Name = urlParams.get('cam1') || 'You';
+        let cam2Name = urlParams.get('cam2') || 'Stranger';
+
+        document.getElementById('local-name').textContent = cam1Name;
+        document.getElementById('remote-name').textContent = cam2Name;
+
+        // WebRTC variables
+        let localStream;
+        let peerConnection;
+        let dataChannel;
+        let isInitiator = false;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        // Replace with your own signaling server (WebSocket)
+        // For testing you can use a free public one or host your own tiny WS server
+        const signalingServer = 'wss://your-signaling-server.com'; // ← CHANGE THIS
+        let ws;
+
+        async function init() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+
+                // Connect to signaling server
+                ws = new WebSocket(signalingServer);
+                
+                ws.onopen = () => {
+                    console.log('Connected to signaling server');
+                    ws.send(JSON.stringify({ type: 'join', room: roomId }));
+                    document.getElementById('status').textContent = `Joined room: ${roomId}`;
+                };
+
+                ws.onmessage = async (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'offer') {
+                        if (!peerConnection) createPeerConnection();
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
+                        ws.send(JSON.stringify({ type: 'answer', answer, room: roomId }));
+                    } 
+                    else if (data.type === 'answer') {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    } 
+                    else if (data.type === 'candidate') {
+                        if (peerConnection) {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        }
+                    } 
+                    else if (data.type === 'ready') {
+                        if (!isInitiator) {
+                            isInitiator = true;
+                            createPeerConnection(true); // Start as initiator
+                        }
+                    }
+                };
+
+                ws.onclose = () => {
+                    document.getElementById('status').textContent = 'Disconnected from signaling';
+                };
+            } catch (err) {
+                console.error(err);
+                document.getElementById('status').textContent = 'Camera/mic access denied or error';
+            }
+        }
+
+        function createPeerConnection(isOfferer = false) {
+            peerConnection = new RTCPeerConnection(configuration);
+
+            // Add local tracks
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // Remote stream
+            peerConnection.ontrack = (event) => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+                document.getElementById('status').textContent = 'Connected ✓';
+            };
+
+            // ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({
+                        type: 'candidate',
+                        candidate: event.candidate,
+                        room: roomId
+                    }));
+                }
+            };
+
+            // Data channel for chat
+            if (isOfferer) {
+                dataChannel = peerConnection.createDataChannel('chat');
+                setupDataChannel();
+            } else {
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+            }
+
+            // Create offer if initiator
+            if (isOfferer) {
+                peerConnection.createOffer()
+                    .then(offer => peerConnection.setLocalDescription(offer))
+                    .then(() => {
+                        ws.send(JSON.stringify({
+                            type: 'offer',
+                            offer: peerConnection.localDescription,
+                            room: roomId
+                        }));
+                    });
+            }
+        }
+
+        function setupDataChannel() {
+            dataChannel.onopen = () => console.log('Data channel open');
+            dataChannel.onmessage = (event) => {
+                addMessage(event.data, 'remote');
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !dataChannel || dataChannel.readyState !== 'open') return;
+
+            dataChannel.send(text);
+            addMessage(text, 'local');
+            input.value = '';
+        }
+
+        function addMessage(text, type) {
+            const messagesDiv = document.getElementById('messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}`;
+            msgDiv.textContent = text;
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Keyboard support for chat
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Start everything
+        window.onload = init;
+    </script>
+</body>
+</html>

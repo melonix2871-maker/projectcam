@@ -108,7 +108,7 @@
       <div class="control-bar" id="controlBar" style="display: none; margin-top: 12px;">
         <button id="stopBtn" class="danger-btn">⏹️ Stop All</button>
         <button id="muteMicABtn">🎤 Mute A</button>
-        <button id="kickGuestBtn" style="background:#ff4757; display:none;">👢 Kick Guest</button>
+        <button id="kickGuestBtn" style="background:#ff4757; color:white; display:none;">👢 Kick Guest</button>
         <select id="qualitySelect">
           <option value="high">High (720p)</option>
           <option value="medium" selected>Medium (540p)</option>
@@ -133,8 +133,8 @@
   let webConnect = null;
   let localStreamA = null;
   let myConnectId = null;
-  let myRole = null;                    // "broadcasterA" only for host
-  let guestConnectId = null;            // Track the second broadcaster
+  let myRole = null;                    // "broadcasterA" = Host
+  let guestConnectId = null;
   let myName = `User_${Math.random().toString(36).slice(2, 8)}`;
   let isMobile = /iPhone|iPad|iPod|Android|BlackBerry|webOS|IEMobile|Opera Mini/i.test(navigator.userAgent);
   let currentQuality = "medium";
@@ -256,7 +256,9 @@
         }
 
         setStatus("✅ Both broadcasters connected", "broadcast");
-        document.getElementById("kickGuestBtn").style.display = "inline-block"; // Show kick button for host
+        if (myRole === "broadcasterA") {
+          document.getElementById("kickGuestBtn").style.display = "inline-block";
+        }
       });
 
       setInterval(updateStats, 3000);
@@ -266,8 +268,9 @@
   }
 
   function resetToWaiting() {
-    document.getElementById("videoGrid").innerHTML = "";
-    createVideoElement(localStreamA, "You (Broadcaster A)", true);
+    const grid = document.getElementById("videoGrid");
+    grid.innerHTML = "";
+    if (localStreamA) createVideoElement(localStreamA, "You (Broadcaster A)", true);
     showWaitingPlaceholder();
     document.getElementById("kickGuestBtn").style.display = "none";
     setStatus("🔴 You are live • Waiting for guest...", "waiting");
@@ -276,7 +279,7 @@
     hasPlayedDoorbell = false;
   }
 
-  // Auto start as Broadcaster A (Host)
+  // Auto start as Host (Broadcaster A)
   async function autoStartBroadcasterA() {
     try {
       localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
@@ -297,26 +300,25 @@
     }
   }
 
-  // Kick the guest (only available to Broadcaster A)
+  // Kick Guest with confirmation
   function kickGuest() {
-    if (!webConnect || !guestConnectId) return;
-    
-    try {
-      // Close streaming to the guest
-      webConnect.closeStreaming(localStreamA, { connectId: guestConnectId });
-      
-      // Force disconnect the peer
-      setTimeout(() => {
-        if (webConnect) {
-          // The library's Disconnect is global, but we simulate kick by stopping forwarding
-          // In practice, the onDisconnect will trigger on the guest side
-        }
-      }, 300);
+    if (!guestConnectId) return;
 
+    if (!confirm("Are you sure you want to kick the guest?")) {
+      return;
+    }
+
+    try {
+      if (webConnect) {
+        // Stop streaming to the guest
+        webConnect.closeStreaming?.(localStreamA, { connectId: guestConnectId });
+      }
+
+      addChatMessage("You kicked the guest.", true);
       resetToWaiting();
-      addChatMessage("Guest has been kicked.", true);
     } catch (e) {
       console.warn("Kick failed", e);
+      resetToWaiting(); // Fallback
     }
   }
 
@@ -389,7 +391,7 @@
 
   startApp();
 
-  console.log("%cFannalo Broadcast - With Kick Guest Feature", "color:#ff6b6b; font-weight:700");
+  console.log("%cFannalo Broadcast - Kick Guest Feature Added", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

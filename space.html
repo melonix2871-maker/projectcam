@@ -51,9 +51,9 @@
       display: flex; align-items: center; gap: 8px;
     }
     .broadcaster { background: linear-gradient(90deg, #ff6b6b, #ff8e53); color: white; box-shadow: 0 4px 15px rgba(255,107,107,0.4); }
-    .viewer { background: linear-gradient(90deg, #4ecdc4, #44a08d); color: white; box-shadow: 0 4px 15px rgba(78,205,196,0.4); }
     .danger-btn { background: #ff4757; color: white; }
     button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .control-bar {
       display: flex; gap: 12px; background: rgba(255,255,255,0.08);
       padding: 12px; border-radius: 16px; backdrop-filter: blur(12px);
@@ -103,6 +103,7 @@
     .chat-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,107,107,0.3); }
     .status-connected { color: #4ade80; }
     .status-broadcast { color: #ff6b6b; animation: pulse 2s infinite; }
+    .status-waiting { color: #ffd700; font-weight: 600; }
     @keyframes pulse { 50% { opacity: 0.6; } }
     .peer-count { font-weight: 700; color: #4ade80; }
   </style>
@@ -110,10 +111,10 @@
 <body>
 <div class="container">
   <h1>Fannalo Broadcast</h1>
-  <div class="sub">Global Pure Browser DHT-Hop P2P • Dual Broadcaster Mode</div>
+  <div class="sub">Global Pure Browser P2P • Only 2 Broadcasters Allowed</div>
   <div class="info-card">
-    <span>Channel:</span> <span class="room-badge" id="channelDisplay">enticechat-live</span>
-    <span id="status" class="status-connected">Ready • Choose role</span>
+    <span>Channel:</span> <span class="room-badge" id="channelDisplay">fannalo-dual</span>
+    <span id="status" class="status-connected">Ready • Choose your slot</span>
     <span class="pill">Peers: <span id="peerCount" class="peer-count">0</span></span>
     <span class="pill">My Role: <span id="nodeRoleStat">none</span></span>
     <span id="latencyDisplay" class="pill" style="margin-left:auto;">Latency: -- ms</span>
@@ -122,13 +123,13 @@
   <div class="main-layout">
     <div class="video-section">
       <div class="button-row">
-        <button id="startBroadcastABtn" class="broadcaster">🎥 Broadcast A</button>
-        <button id="startBroadcastBBtn" class="broadcaster">🎥 Broadcast B</button>
-        <button id="joinViewerBtn" class="viewer">👁️ Join as Viewer</button>
+        <button id="startBroadcastABtn" class="broadcaster">🎥 Start as Broadcaster A</button>
+        <button id="startBroadcastBBtn" class="broadcaster">🎥 Start as Broadcaster B</button>
       </div>
       <div class="control-bar" id="controlBar" style="display: none;">
         <button id="stopBtn" class="danger-btn">⏹️ Stop All</button>
-        <button id="muteMicBtn">🔇 Mute Mic</button>
+        <button id="muteMicABtn">🎤 Mute A</button>
+        <button id="muteMicBBtn">🎤 Mute B</button>
         <select id="qualitySelect">
           <option value="high">High (720p)</option>
           <option value="medium" selected>Medium (540p)</option>
@@ -139,7 +140,7 @@
     </div>
 
     <div class="chat-section">
-      <div class="chat-header">💬 Live Chat (Broadcasters Only) <span id="chatPeerCount" style="margin-left:auto; font-size:0.8rem; opacity:0.6;"></span></div>
+      <div class="chat-header">💬 Broadcaster Chat Only</div>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-area" id="chatInputArea" style="display: none;">
         <input id="chatInput" class="chat-input" placeholder="Type message... (Enter to send)" />
@@ -150,22 +151,27 @@
 </div>
 
 <script>
-  const CHANNEL = "enticechat-live";
+  const CHANNEL = "fannalo-dual";
   let webConnect = null;
   let localStreamA = null;
   let localStreamB = null;
   let myConnectId = null;
-  let myRole = "viewer";           // "broadcasterA", "broadcasterB", or "viewer"
+  let myRole = null;                    // "broadcasterA" or "broadcasterB"
   let myName = `User_${Math.random().toString(36).slice(2, 8)}`;
   let isMobile = /iPhone|iPad|iPod|Android|BlackBerry|webOS|IEMobile|Opera Mini/i.test(navigator.userAgent);
   let currentQuality = "medium";
   let reconnectAttempts = 0;
   const MAX_RECONNECT = 8;
 
+  // Doorbell sound (short ding-dong)
+  const doorbell = new Audio("https://www.soundjay.com/buttons/doorbell-1.mp3");
+
   function setStatus(msg, type = "connected") {
     const el = document.getElementById("status");
     el.innerHTML = msg;
-    el.className = type === "broadcast" ? "status-broadcast" : "status-connected";
+    if (type === "broadcast") el.className = "status-broadcast";
+    else if (type === "waiting") el.className = "status-waiting";
+    else el.className = "status-connected";
   }
 
   function updateStats() {
@@ -173,7 +179,6 @@
     webConnect.getConnection((attr) => {
       const count = attr.connection ? attr.connection.length : 0;
       document.getElementById("peerCount").textContent = count;
-      document.getElementById("chatPeerCount").textContent = `${count} online`;
       const latencyEl = document.getElementById("latencyDisplay");
       latencyEl.textContent = `Latency: ~${Math.floor(Math.random() * 400) + 80} ms`;
     });
@@ -227,12 +232,10 @@
 
       webConnect.getMyId((attr) => {
         myConnectId = attr.connectId;
-        setStatus("🌍 Connected to Global DHT-Hop Mesh", "connected");
       });
 
       webConnect.onConnect(async (attr) => {
         updateStats();
-        // Send our local streams to new peers
         if (localStreamA) webConnect.openStreaming(localStreamA, { connectId: attr.connectId });
         if (localStreamB) webConnect.openStreaming(localStreamB, { connectId: attr.connectId });
       });
@@ -254,76 +257,55 @@
         }
       });
 
-      // Handle incoming streams - Prevent duplicate of our own streams
+      // When the second broadcaster's stream arrives → play doorbell
       webConnect.onStreaming((stream, attr) => {
-        // Skip if this is our own stream coming back
         if (attr.connectId === myConnectId) return;
+        createVideoElement(stream, "Other Broadcaster");
+        setStatus("✅ Both broadcasters connected", "broadcast");
 
-        // Create label based on who is sending
-        let label = `Remote • ${attr.connectId.slice(0,6)}`;
-        if (myRole === "broadcasterA" || myRole === "broadcasterB") {
-          label = "Other Broadcaster";
-        }
-
-        createVideoElement(stream, label);
-        setStatus("✅ Receiving live stream", "connected");
+        // Play doorbell sound once when the other broadcaster joins
+        doorbell.currentTime = 0;
+        doorbell.play().catch(() => {}); // Ignore autoplay restrictions
       });
 
       setInterval(updateStats, 3000);
     } catch (e) {
       console.error("Init failed", e);
-      setStatus("⚠️ Connection issue – retrying", "connected");
-      setTimeout(initWebConnect, 2000);
     }
   }
 
-  async function startBroadcastA() {
-    if (localStreamA) return;
+  async function startBroadcast(role) {
+    if (myRole) return;
+
     currentQuality = document.getElementById("qualitySelect").value;
     try {
-      localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
-      createVideoElement(localStreamA, "You (Broadcaster A)", true);
-      
-      myRole = "broadcasterA";
-      document.getElementById("chatInputArea").style.display = "flex";
-      document.getElementById("nodeRoleStat").textContent = "Broadcaster A";
+      const stream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
+
+      if (role === "A") {
+        localStreamA = stream;
+        createVideoElement(localStreamA, "You (Broadcaster A)", true);
+        myRole = "broadcasterA";
+        document.getElementById("nodeRoleStat").textContent = "Broadcaster A";
+      } else {
+        localStreamB = stream;
+        createVideoElement(localStreamB, "You (Broadcaster B)", true);
+        myRole = "broadcasterB";
+        document.getElementById("nodeRoleStat").textContent = "Broadcaster B";
+      }
 
       await initWebConnect();
-      setStatus("🔴 Broadcasting A - Live", "broadcast");
+      setStatus("🔴 You are live • Waiting for the second broadcaster...", "waiting");
       document.getElementById("controlBar").style.display = "flex";
-    } catch (err) {
-      console.error(err);
-      alert("Camera access denied or failed");
-    }
-  }
-
-  async function startBroadcastB() {
-    if (localStreamB) return;
-    currentQuality = document.getElementById("qualitySelect").value;
-    try {
-      localStreamB = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
-      createVideoElement(localStreamB, "You (Broadcaster B)", true);
-      
-      myRole = "broadcasterB";
       document.getElementById("chatInputArea").style.display = "flex";
-      document.getElementById("nodeRoleStat").textContent = "Broadcaster B";
 
-      await initWebConnect();
-      setStatus("🔴 Broadcasting B - Live", "broadcast");
-      document.getElementById("controlBar").style.display = "flex";
+      // Disable buttons
+      document.getElementById("startBroadcastABtn").disabled = true;
+      document.getElementById("startBroadcastBBtn").disabled = true;
+
     } catch (err) {
       console.error(err);
-      alert("Camera access denied or failed");
+      alert("Camera or microphone access was denied.");
     }
-  }
-
-  async function joinViewer() {
-    await stopAll();
-    myRole = "viewer";
-    document.getElementById("nodeRoleStat").textContent = "Viewer";
-    document.getElementById("chatInputArea").style.display = "none";
-    await initWebConnect();
-    setStatus("👁️ Joined as Viewer", "connected");
   }
 
   async function stopAll() {
@@ -336,31 +318,42 @@
     document.getElementById("chatInputArea").style.display = "none";
     document.getElementById("nodeRoleStat").textContent = "none";
     setStatus("Stopped • Ready");
-    myRole = "viewer";
+
+    myRole = null;
     reconnectAttempts = 0;
+
+    document.getElementById("startBroadcastABtn").disabled = false;
+    document.getElementById("startBroadcastBBtn").disabled = false;
   }
 
-  // Event listeners
-  document.getElementById("startBroadcastABtn").onclick = startBroadcastA;
-  document.getElementById("startBroadcastBBtn").onclick = startBroadcastB;
-  document.getElementById("joinViewerBtn").onclick = joinViewer;
+  // Event Listeners
+  document.getElementById("startBroadcastABtn").onclick = () => startBroadcast("A");
+  document.getElementById("startBroadcastBBtn").onclick = () => startBroadcast("B");
   document.getElementById("stopBtn").onclick = stopAll;
 
-  let micMuted = false;
-  document.getElementById("muteMicBtn").onclick = () => {
-    if (localStreamA) localStreamA.getAudioTracks().forEach(track => track.enabled = !micMuted);
-    if (localStreamB) localStreamB.getAudioTracks().forEach(track => track.enabled = !micMuted);
-    micMuted = !micMuted;
-    document.getElementById("muteMicBtn").textContent = micMuted ? "🔊 Unmute" : "🔇 Mute";
+  // Separate mute buttons
+  let mutedA = false, mutedB = false;
+  document.getElementById("muteMicABtn").onclick = () => {
+    if (!localStreamA) return;
+    mutedA = !mutedA;
+    localStreamA.getAudioTracks().forEach(track => track.enabled = !mutedA);
+    document.getElementById("muteMicABtn").textContent = mutedA ? "🎤 Unmute A" : "🎤 Mute A";
+  };
+
+  document.getElementById("muteMicBBtn").onclick = () => {
+    if (!localStreamB) return;
+    mutedB = !mutedB;
+    localStreamB.getAudioTracks().forEach(track => track.enabled = !mutedB);
+    document.getElementById("muteMicBBtn").textContent = mutedB ? "🎤 Unmute B" : "🎤 Mute B";
   };
 
   document.getElementById("qualitySelect").onchange = (e) => { currentQuality = e.target.value; };
 
-  // Chat - Only broadcasters can send messages
+  // Chat
   const chatInput = document.getElementById("chatInput");
   const sendBtn = document.getElementById("sendChatBtn");
   function sendChat() {
-    if (myRole === "viewer") return; // Block viewers from chatting
+    if (!myRole) return;
     const text = chatInput.value.trim();
     if (!text || !webConnect) return;
     webConnect.Send({ text, name: myName, ts: Date.now() }, { connectId: null });
@@ -372,7 +365,7 @@
 
   window.addEventListener("beforeunload", () => { if (webConnect) webConnect.Disconnect(); });
 
-  console.log("%cFannalo Broadcast - Dual Broadcaster Mode (Fixed Duplicates + Broadcaster-only Chat)", "color:#ff6b6b; font-weight:700");
+  console.log("%cFannalo Broadcast - Dual Broadcaster Only Mode with Doorbell Alert", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

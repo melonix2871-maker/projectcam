@@ -121,28 +121,42 @@
     document.getElementById("videoGrid").appendChild(div);
   }
 
-  async function initConnection() {
+ async function initWebConnect() {
+  if (webConnect) return;
+  try {
     webConnect = webconnect({
-      appName: "Fannalo",
+      appName: "FannaloBroadcast",
       channelName: roomId,
       connectPassword: "entice2026",
       iceServers: [
+        // Reliable public STUN servers (more stable than the old ones)
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun.cloudflare.com:3478" }
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun.cloudflare.com:3478" },
+        { urls: "stun:stun.metered.ca:3478" },           // Good alternative
+        { urls: "stun:openrelay.metered.ca:80" }
       ]
+      // We intentionally avoid custom torrentTrackers / nostrRelays here
+      // because many are blocked or unstable now
     });
 
-    webConnect.getMyId(attr => myConnectId = attr.connectId);
+    webConnect.getMyId((attr) => {
+      myConnectId = attr.connectId;
+      console.log("My ID:", myConnectId);
+    });
 
-    webConnect.onConnect(attr => {
-      if (localStream) webConnect.openStreaming(localStream, { connectId: attr.connectId });
+    webConnect.onConnect(async (attr) => {
+      console.log("New peer:", attr.connectId);
+      if (localStream) {
+        webConnect.openStreaming(localStream, { connectId: attr.connectId });
+      }
     });
 
     webConnect.onStreaming((stream, attr) => {
       if (attr.connectId === myConnectId || remoteStreamShown) return;
-
       remoteStreamShown = true;
+
       const waiting = document.getElementById("waitingBox");
       if (waiting) waiting.remove();
 
@@ -153,10 +167,15 @@
         doorbell.play().catch(() => {});
       }
 
-      setStatus("Both connected", "broadcast");
+      setStatus("✅ Both cameras connected", "broadcast");
       if (myRole === "host") document.getElementById("kickGuestBtn").style.display = "inline-block";
     });
+
+  } catch (e) {
+    console.error("Connection init failed", e);
+    setStatus("Connection issue – retrying", "waiting");
   }
+}
 
   // Host starts automatically
   async function startHost() {

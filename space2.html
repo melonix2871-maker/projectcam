@@ -8,24 +8,28 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/reconnecting-websocket/1.0.0/reconnecting-websocket.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    :root { --accent: #ff6b6b; }
+    * { box-sizing: border-box; }
     body {
       margin: 0; padding: 0;
       background: radial-gradient(circle at 30% 20%, #0a0a1a, #020208);
       color: #f0f0f0;
       font-family: 'Inter', system-ui, sans-serif;
-      height: 100dvh;
       overflow: hidden;
+      height: 100dvh;
     }
     .container { max-width: 1480px; margin: 0 auto; padding: 12px; height: 100dvh; display: flex; flex-direction: column; }
-    h1 { text-align: center; font-size: clamp(1.8rem, 5vw, 2.8rem); background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .info-card { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border-radius: 16px; padding: 12px 20px; display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+    h1 { text-align: center; font-size: clamp(1.8rem, 5vw, 2.8rem); background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 4px; font-weight: 700; }
+    .sub { text-align: center; font-size: 0.95rem; opacity: 0.7; margin-bottom: 16px; }
+    .info-card { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border-radius: 16px; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
     .room-badge { background: #ff6b6b; color: #fff; padding: 4px 14px; border-radius: 9999px; font-weight: 600; }
     .share-box { background: rgba(255,255,255,0.1); padding: 14px; border-radius: 12px; margin: 12px 0; text-align: center; }
-    .video-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
+    .video-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; min-height: 0; }
     .video-wrapper { background: #111; border-radius: 20px; overflow: hidden; position: relative; aspect-ratio: 16/9; }
     video { width: 100%; height: 100%; object-fit: cover; }
     .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.7); color: white; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; }
     .waiting-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: #ffd700; padding: 20px 40px; border-radius: 12px; font-size: 1.3rem; font-weight: 600; }
+    .kicked-message { color: #ff4757; font-size: 1.4rem; text-align: center; padding: 60px; font-weight: 600; }
     .control-bar { display: flex; gap: 10px; background: rgba(255,255,255,0.08); padding: 12px; border-radius: 16px; margin-top: 12px; flex-wrap: wrap; }
     button { padding: 10px 20px; border: none; border-radius: 9999px; font-weight: 600; cursor: pointer; }
     .danger-btn { background: #ff4757; color: white; }
@@ -58,9 +62,9 @@
   </div>
 
   <div style="margin-top:15px;">
-    <div style="font-weight:600; margin-bottom:8px;">💬 Chat</div>
-    <div id="chatMessages" style="height:160px; overflow-y:auto; background:rgba(255,255,255,0.05); padding:10px; border-radius:12px;"></div>
-    <div style="margin-top:8px; display:flex; gap:8px;">
+    <div style="font-weight:600; margin-bottom:8px;">💬 Live Chat</div>
+    <div id="chatMessages" style="height:180px; overflow-y:auto; background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:8px;"></div>
+    <div style="display:flex; gap:8px;">
       <input id="chatInput" placeholder="Type message..." style="flex:1; padding:12px; border-radius:9999px; border:none; background:rgba(255,255,255,0.1); color:white;">
       <button id="sendChatBtn">Send</button>
     </div>
@@ -81,6 +85,7 @@
   let myConnectId = null;
   let remoteStreamShown = false;
   let myName = `User_${Math.random().toString(36).slice(2,6)}`;
+  let isKicked = false;
 
   const doorbell = new Audio("https://www.soundjay.com/door_c2026/doorbell-6.mp3");
   let hasPlayedDoorbell = false;
@@ -105,7 +110,20 @@
     document.getElementById("videoGrid").appendChild(div);
   }
 
+  function showKickedMessage() {
+    isKicked = true;
+    document.getElementById("videoGrid").innerHTML = `
+      <div class="kicked-message">
+        You have been kicked by the host.<br>
+        <small style="font-size:1rem; opacity:0.8;">The room is now closed for you.</small>
+      </div>
+    `;
+    document.getElementById("controlBar").style.display = "none";
+    document.getElementById("chatInputArea").style.display = "none";
+  }
+
   async function initWebConnect() {
+    if (webConnect) return;
     webConnect = webconnect({
       appName: "FannaloBroadcast",
       channelName: roomId,
@@ -122,6 +140,12 @@
 
     webConnect.onConnect(attr => {
       if (localStream) webConnect.openStreaming(localStream, { connectId: attr.connectId });
+    });
+
+    webConnect.onDisconnect(attr => {
+      if (myRole === "guest" && attr.connectId === myConnectId) {
+        showKickedMessage();
+      }
     });
 
     webConnect.onStreaming((stream, attr) => {
@@ -167,7 +191,6 @@
     myRole = "guest";
     document.getElementById("nodeRoleStat").textContent = "Guest";
 
-    // Guest also turns on their camera
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     createVideo(localStream, "You (Guest)", true);
 
@@ -179,14 +202,40 @@
     const link = document.getElementById("shareLink");
     link.select();
     document.execCommand("copy");
-    alert("Link copied!");
+    alert("Link copied to clipboard!");
   }
 
   function kickGuest() {
-    if (confirm("Kick the guest?")) location.reload();
+    if (!confirm("Are you sure you want to kick the guest?")) return;
+    if (webConnect) webConnect.Disconnect();
+    location.reload();
   }
 
-  // Main
+  // Chat
+  function addChatMessage(text, isSelf = false) {
+    const container = document.getElementById("chatMessages");
+    const div = document.createElement("div");
+    div.className = `chat-message ${isSelf ? "self" : ""}`;
+    div.style.padding = "8px 12px";
+    div.style.margin = "4px 0";
+    div.style.borderRadius = "12px";
+    div.style.background = isSelf ? "#ff6b6b" : "rgba(255,255,255,0.1)";
+    div.textContent = text;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  document.getElementById("sendChatBtn").onclick = () => {
+    const input = document.getElementById("chatInput");
+    const text = input.value.trim();
+    if (text && webConnect) {
+      webConnect.Send(text, { connectId: null });
+      addChatMessage(text, true);
+      input.value = "";
+    }
+  };
+
+  // Main start
   async function startApp() {
     if (isHost) {
       await startHost();

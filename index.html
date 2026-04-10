@@ -4,202 +4,454 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Projectcam</title>
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <!-- Tailwind CSS CDN (minimalistic modern UI) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- webconnect.js for pure P2P video + data channel -->
     <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
     <style>
-        body { margin:0; font-family:Arial,sans-serif; background:#111; color:#fff; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
-        header { background:#1a1a1a; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #333; }
-        h1 { margin:0; font-size:24px; }
-        .controls { display:flex; gap:10px; }
-        button { padding:10px 20px; border:none; border-radius:30px; font-weight:bold; cursor:pointer; }
-        .btn-start { background:#28a745; color:white; }
-        .btn-stop  { background:#dc3545; color:white; }
-        .btn-next  { background:#007bff; color:white; }
-        .main { flex:1; display:flex; }
-        .video-section { flex:4; padding:15px; background:#1a1a1a; display:flex; flex-direction:column; gap:12px; }
-        .chat-section { flex:6; display:flex; flex-direction:column; background:#222; border-left:2px solid #333; }
-        video { width:100%; background:#000; border-radius:10px; object-fit:cover; }
-        .local-video { height:42%; }
-        .remote-video { height:58%; }
-        .video-wrapper { position:relative; }
-        .name-label { position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.7); padding:6px 14px; border-radius:6px; font-size:14px; }
-        .status { padding:12px; text-align:center; background:#222; border-radius:6px; margin-top:8px; }
-        .chat-header { padding:15px; background:#1a1a1a; border-bottom:1px solid #333; font-weight:bold; }
-        .messages { flex:1; padding:15px; overflow-y:auto; background:#1a1a1a; display:flex; flex-direction:column; gap:10px; }
-        .message { max-width:80%; padding:10px 14px; border-radius:18px; word-wrap:break-word; }
-        .message.local  { align-self:flex-end; background:#007bff; color:white; }
-        .message.remote { align-self:flex-start; background:#333; }
-        .chat-input { padding:15px; background:#1a1a1a; display:flex; gap:10px; border-top:1px solid #333; }
-        input { flex:1; padding:12px 18px; border:none; border-radius:25px; background:#333; color:white; }
-        .send-btn { padding:12px 24px; background:#007bff; color:white; border:none; border-radius:25px; }
-        .modal { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:100; }
-        .modal-content { background:#222; padding:30px; border-radius:12px; width:90%; max-width:420px; }
-        input[type="text"], input[type="password"] { width:100%; padding:12px; margin:8px 0; background:#333; border:none; color:white; border-radius:6px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        :root { --tw-color-primary: #00d4ff; }
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .modal { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        video { background: #111; border-radius: 16px; object-fit: cover; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .message { max-width: 75%; padding: 12px 18px; border-radius: 20px; word-break: break-word; }
+        .message.local { background: #00d4ff; color: #111; border-bottom-right-radius: 4px; }
+        .message.remote { background: #222; border-bottom-left-radius: 4px; }
     </style>
 </head>
-<body>
-    <header>
-        <h1>Projectcam</h1>
-        <div class="controls" id="headerControls" style="display:none;">
-            <button class="btn-start" onclick="startSearching()">Start</button>
-            <button class="btn-stop" onclick="stopConnection()">Stop</button>
-            <button class="btn-next" onclick="nextPeer()">Next</button>
+<body class="bg-zinc-950 text-white dark">
+    <!-- HEADER -->
+    <header class="bg-zinc-900 border-b border-zinc-800 sticky top-0 z-50">
+        <div class="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-x-3">
+                <div class="w-9 h-9 bg-cyan-500 rounded-2xl flex items-center justify-center text-2xl">📹</div>
+                <h1 class="text-3xl font-semibold tracking-tight">Projectcam</h1>
+            </div>
+
+            <!-- Right side: User info + controls -->
+            <div id="headerRight" class="hidden items-center gap-x-6">
+                <!-- User avatar + info -->
+                <div onclick="showProfile()" class="flex items-center gap-x-3 cursor-pointer hover:bg-zinc-800 px-4 py-2 rounded-3xl transition">
+                    <img id="headerAvatar" src="" alt="" class="w-9 h-9 rounded-2xl object-cover border-2 border-cyan-500">
+                    <div>
+                        <div id="headerUsername" class="font-medium"></div>
+                        <div id="headerCountry" class="text-xs text-zinc-400 flex items-center gap-x-1"></div>
+                    </div>
+                </div>
+
+                <!-- Theme toggle -->
+                <button onclick="toggleTheme()" class="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-zinc-800 transition text-xl">
+                    🌗
+                </button>
+
+                <!-- Controls -->
+                <div class="flex items-center gap-x-2 bg-zinc-800 rounded-3xl p-1">
+                    <button onclick="startSearching()" id="btnStart"
+                            class="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-3xl transition flex items-center gap-x-2">
+                        <span class="text-lg">▶️</span> START
+                    </button>
+                    <button onclick="stopConnection()" id="btnStop" disabled
+                            class="px-8 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-3xl transition flex items-center gap-x-2">
+                        <span class="text-lg">⏹️</span> STOP
+                    </button>
+                    <button onclick="nextPeer()" id="btnNext" disabled
+                            class="px-8 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-3xl transition flex items-center gap-x-2">
+                        <span class="text-lg">⏭️</span> NEXT
+                    </button>
+                </div>
+            </div>
         </div>
-        <div id="usernameDisplay" style="display:none;"></div>
     </header>
 
-    <div class="main">
-        <!-- Video Section -->
-        <div class="video-section">
-            <div class="video-wrapper">
-                <div class="name-label" id="local-name">You</div>
-                <video id="localVideo" class="local-video" autoplay muted playsinline></video>
+    <!-- MAIN CONTENT -->
+    <div class="max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
+        <!-- LEFT: Video section -->
+        <div class="flex-1 flex flex-col p-6 gap-6 bg-zinc-950">
+            <div class="flex-1 grid grid-rows-2 gap-6">
+                <!-- Local video -->
+                <div class="relative rounded-3xl overflow-hidden bg-black">
+                    <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
+                    <div class="absolute top-6 left-6 bg-black/70 text-white text-sm px-4 py-2 rounded-2xl flex items-center gap-x-2">
+                        <span id="localName" class="font-medium">You</span>
+                        <div id="localStatus" class="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
+                    </div>
+                    <div class="absolute bottom-6 left-6 flex gap-3">
+                        <button onclick="toggleCamera()" id="camBtn"
+                                class="bg-black/70 hover:bg-black/90 text-white px-5 py-2.5 rounded-2xl flex items-center gap-x-2 text-sm font-medium">
+                            📷 ON
+                        </button>
+                        <button onclick="toggleMic()" id="micBtn"
+                                class="bg-black/70 hover:bg-black/90 text-white px-5 py-2.5 rounded-2xl flex items-center gap-x-2 text-sm font-medium">
+                            🎤 ON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Remote video -->
+                <div class="relative rounded-3xl overflow-hidden bg-black">
+                    <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
+                    <div class="absolute top-6 left-6 bg-black/70 text-white text-sm px-4 py-2 rounded-2xl flex items-center gap-x-2">
+                        <span id="remoteName" class="font-medium">Stranger</span>
+                    </div>
+                    <div id="remoteStatus" class="absolute bottom-6 right-6 bg-black/70 text-xs px-4 py-1 rounded-2xl hidden">Connected</div>
+                </div>
             </div>
-            <div class="video-wrapper">
-                <div class="name-label" id="remote-name">Stranger</div>
-                <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
-            </div>
-            <div class="status" id="status">Please login or register first</div>
         </div>
 
-        <!-- Chat -->
-        <div class="chat-section">
-            <div class="chat-header">P2P Chat</div>
-            <div class="messages" id="messages"></div>
-            <div class="chat-input">
-                <input type="text" id="chatInput" placeholder="Type a message..." disabled>
-                <button class="send-btn" onclick="sendMessage()">Send</button>
+        <!-- RIGHT: Chat -->
+        <div class="w-96 border-l border-zinc-800 bg-zinc-900 flex flex-col">
+            <div class="px-6 py-5 border-b border-zinc-800 font-semibold flex items-center justify-between">
+                <span>P2P Chat</span>
+                <span id="chatPeer" class="text-xs bg-zinc-800 px-3 py-1 rounded-3xl">Waiting for peer...</span>
+            </div>
+
+            <div id="messages" class="flex-1 overflow-y-auto p-6 space-y-4 bg-zinc-950"></div>
+
+            <div class="p-4 border-t border-zinc-800 bg-zinc-900">
+                <div class="flex gap-2">
+                    <input id="chatInput" type="text" placeholder="Type message..." 
+                           class="flex-1 bg-zinc-800 border border-zinc-700 focus:border-cyan-400 rounded-3xl px-6 py-4 outline-none text-white"
+                           onkeypress="if(event.key==='Enter') sendMessage()">
+                    <button onclick="sendMessage()" 
+                            class="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold px-8 rounded-3xl transition">Send</button>
+                </div>
             </div>
         </div>
     </div>
 
-   
-  <!-- Updated Auth Modal -->
-<div class="modal" id="authModal">
-    <div class="modal-content">
-        <h2 id="modalTitle">Projectcam - Login with Passkey</h2>
-        
-        <input type="text" id="username" placeholder="Username" autocomplete="username">
-        
-        <div id="passkeySection" style="margin:15px 0;">
-            <button onclick="startWebAuthnLogin()" style="width:100%; padding:14px; background:#007bff; color:white; border:none; border-radius:8px; font-size:16px;">
-                Login with Passkey / Biometrics
-            </button>
+    <!-- LOGIN / REGISTER MODAL -->
+    <div id="authModal" class="modal fixed inset-0 bg-black/90 flex items-center justify-center z-[100]">
+        <div class="bg-zinc-900 rounded-3xl w-full max-w-lg mx-4 overflow-hidden">
+            <div class="px-8 pt-8 pb-6">
+                <h2 id="modalTitle" class="text-3xl font-semibold mb-2">Welcome to Projectcam</h2>
+                <p id="modalSubtitle" class="text-zinc-400">Register or login to start face-to-face chats</p>
+            </div>
+
+            <div class="px-8 space-y-6">
+                <!-- Username -->
+                <div>
+                    <label class="block text-sm text-zinc-400 mb-1">Username</label>
+                    <input id="usernameInput" type="text" placeholder="Choose a unique username" 
+                           class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 text-white focus:border-cyan-400 outline-none">
+                </div>
+
+                <!-- Password -->
+                <div>
+                    <label class="block text-sm text-zinc-400 mb-1">Password / Passphrase</label>
+                    <input id="passwordInput" type="password" placeholder="Strong passphrase recommended" 
+                           class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 text-white focus:border-cyan-400 outline-none">
+                </div>
+
+                <!-- Avatar upload -->
+                <div>
+                    <label class="block text-sm text-zinc-400 mb-2">Avatar (optional)</label>
+                    <div class="flex items-center gap-4">
+                        <img id="previewAvatar" src="https://via.placeholder.com/80x80/222/fff?text=👤" 
+                             class="w-20 h-20 rounded-2xl object-cover border-2 border-dashed border-zinc-600">
+                        <div>
+                            <label class="cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-3 rounded-2xl text-sm inline-flex items-center">
+                                Upload photo
+                                <input type="file" id="avatarInput" accept="image/*" class="hidden" onchange="previewAvatar()">
+                            </label>
+                            <p class="text-xs text-zinc-500 mt-2">JPG, PNG • Max 2MB</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gender -->
+                <div>
+                    <label class="block text-sm text-zinc-400 mb-2">Gender</label>
+                    <select id="genderInput" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 text-white focus:border-cyan-400 outline-none">
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="lgbtqa+">LGBTQIA+</option>
+                        <option value="other">Other / Prefer not to say</option>
+                    </select>
+                </div>
+
+                <!-- Register toggle -->
+                <div id="registerExtra" class="hidden">
+                    <p class="text-xs text-zinc-400">Country will be auto-detected from your IP.</p>
+                </div>
+
+                <button onclick="handleAuth()" id="authButton"
+                        class="w-full py-5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-lg rounded-3xl transition">
+                    Login
+                </button>
+
+                <div class="flex items-center justify-between text-sm">
+                    <button onclick="toggleAuthMode()" id="toggleModeBtn" class="text-cyan-400 hover:text-cyan-300">
+                        Need an account? Register
+                    </button>
+                    <button onclick="recoverPassword()" class="text-zinc-400 hover:text-white">
+                        Forgot password?
+                    </button>
+                </div>
+            </div>
+
+            <div class="px-8 py-6 text-center text-xs text-zinc-500 border-t border-zinc-800">
+                100% browser-only • Powered by GenosDB + webconnect.js
+            </div>
         </div>
-
-        <button onclick="toggleRegisterMode()" id="toggleBtn" style="margin-top:10px; width:100%; padding:12px; background:#555;">
-            Don't have a passkey? Register new one
-        </button>
-
-        <div id="registerSection" style="display:none; margin-top:20px;">
-            <p><strong>Register New Passkey</strong></p>
-            <button onclick="registerPasskey()" style="width:100%; padding:14px; background:#28a745; color:white; border:none; border-radius:8px;">
-                Create Passkey for this Username
-            </button>
-            <small style="display:block; margin-top:10px; color:#aaa;">
-                Your device will ask for fingerprint / Face ID / PIN
-            </small>
-        </div>
-
-        <p id="authMessage" style="margin-top:15px; text-align:center; color:#ffaa00; min-height:20px;"></p>
-        
-        <button onclick="recoverWithQuestion()" style="margin-top:10px; width:100%; padding:10px; background:#666; color:white; border:none; border-radius:6px;">
-            Forgot Access? Use Security Question
-        </button>
     </div>
-</div>
 
-    <script>
-      let currentUsername = null;
+    <script type="module">
+        // ============== GenosDB Setup ==============
+        import { gdb } from "https://cdn.jsdelivr.net/npm/genosdb@latest/dist/index.min.js";
 
-// Check if browser supports WebAuthn
-function browserSupportsWebAuthn() {
-    return !!(navigator.credentials && navigator.credentials.create && navigator.credentials.get);
-}
+        let db;
+        let currentUser = null; // { username, avatarBase64, gender, country, flag }
+        let wc = null;
+        let localStream = null;
+        let currentPeerId = null;
+        let isRegisterMode = false;
+        let avatarBase64 = null;
 
-async function registerPasskey() {
-    const username = document.getElementById('username').value.trim();
-    if (!username) return showMessage("Enter a username", "red");
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const messagesDiv = document.getElementById('messages');
 
-    if (!browserSupportsWebAuthn()) return showMessage("Your browser does not support Passkeys", "red");
+        // Tailwind script already loaded
+        function initTailwind() {
+            // Already included via CDN
+        }
 
-    try {
-        // For pure client-side demo we simulate + store in GunDB
-        const userId = new TextEncoder().encode(username); // simple ID
+        // ============== Theme Toggle ==============
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.contains('dark');
+            if (isDark) {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
 
-        const publicKeyCredentialCreationOptions = {
-            challenge: new Uint8Array(32), // In real app this comes from server
-            rp: { name: "Projectcam", id: location.hostname },
-            user: {
-                id: userId,
-                name: username,
-                displayName: username
-            },
-            pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256
-            authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" }
+        // ============== Country Auto-detect + Flag ==============
+        async function getCountryAndFlag() {
+            try {
+                const res = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+                const data = await res.json();
+                const code = data.country_code || 'US';
+                const emoji = String.fromCodePoint(...code.split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+                return { country: data.country_name || 'Unknown', code, flag: emoji };
+            } catch (e) {
+                return { country: 'Unknown', code: 'XX', flag: '🌍' };
+            }
+        }
+
+        // ============== Avatar Preview ==============
+        window.previewAvatar = function() {
+            const file = document.getElementById('avatarInput').files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                avatarBase64 = e.target.result;
+                document.getElementById('previewAvatar').src = avatarBase64;
+            };
+            reader.readAsDataURL(file);
         };
 
-        const credential = await navigator.credentials.create({ publicKey: publicKeyCredentialCreationOptions });
-        
-        // Store credential info + username in GunDB (for demo)
-        // In real production you would send credential to server
-        gun.get('users').get(username).put({
-            pubKey: Array.from(new Uint8Array(credential.rawId)),
-            registered: Date.now()
-        });
+        // ============== Auth Modal Logic ==============
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('modalTitle').textContent = isRegisterMode ? 'Create Account' : 'Login to Projectcam';
+            document.getElementById('modalSubtitle').textContent = isRegisterMode ? 'Join the P2P network' : 'Sign in to start video chats';
+            document.getElementById('authButton').textContent = isRegisterMode ? 'Create Account' : 'Login';
+            document.getElementById('registerExtra').classList.toggle('hidden', !isRegisterMode);
+            document.getElementById('toggleModeBtn').textContent = isRegisterMode ? 'Already have an account? Login' : 'Need an account? Register';
+        }
 
-        showMessage("Passkey created successfully! You can now login.", "green");
-        currentUsername = username;
-        finishLogin(username);
-    } catch (err) {
-        showMessage("Passkey registration failed: " + err.message, "red");
-    }
-}
+        async function handleAuth() {
+            const username = document.getElementById('usernameInput').value.trim();
+            const password = document.getElementById('passwordInput').value.trim();
 
-async function startWebAuthnLogin() {
-    const username = document.getElementById('username').value.trim();
-    if (!username) return showMessage("Enter username first", "red");
-
-    try {
-        const credential = await navigator.credentials.get({
-            publicKey: {
-                challenge: new Uint8Array(32),
-                allowCredentials: [], // For discoverable credentials (resident keys)
-                userVerification: "preferred"
+            if (!username || !password) {
+                alert('Username and password are required');
+                return;
             }
-        });
 
-        // In real app: verify assertion on server
-        // Here we just check if username exists in GunDB
-        gun.get('users').get(username).once(data => {
-            if (data) {
-                showMessage("Login successful with Passkey ✓", "green");
-                finishLogin(username);
+            if (isRegisterMode) {
+                // Register new user
+                const countryInfo = await getCountryAndFlag();
+                const gender = document.getElementById('genderInput').value;
+
+                currentUser = {
+                    username: username,
+                    passwordHash: btoa(password), // Simple demo hash (not secure for prod)
+                    avatar: avatarBase64 || 'https://via.placeholder.com/80x80/222/fff?text=👤',
+                    gender: gender,
+                    country: countryInfo.country,
+                    flag: countryInfo.flag,
+                    lastOnline: Date.now()
+                };
+
+                // Store in GenosDB
+                db = await gdb('projectcam', { rtc: true });
+                await db.put(`users/${username}`, currentUser);
+
+                finishLogin();
             } else {
-                showMessage("No passkey found for this username", "red");
+                // Login
+                db = await gdb('projectcam', { rtc: true });
+                const userData = await db.get(`users/${username}`);
+                if (userData && userData.passwordHash === btoa(password)) {
+                    currentUser = userData;
+                    finishLogin();
+                } else {
+                    alert('Wrong username or password');
+                }
             }
-        });
-    } catch (err) {
-        showMessage("Passkey login failed or cancelled", "red");
-    }
-}
+        }
 
-function toggleRegisterMode() {
-    const regSection = document.getElementById('registerSection');
-    regSection.style.display = regSection.style.display === 'none' ? 'block' : 'none';
-}
+        function finishLogin() {
+            document.getElementById('authModal').style.display = 'none';
+            document.getElementById('headerRight').classList.remove('hidden');
+            document.getElementById('headerUsername').textContent = currentUser.username;
+            document.getElementById('headerAvatar').src = currentUser.avatar;
+            document.getElementById('headerCountry').innerHTML = `${currentUser.flag} ${currentUser.country}`;
 
-function showMessage(text, color = "orange") {
-    const el = document.getElementById('authMessage');
-    el.textContent = text;
-    el.style.color = color;
-}
+            // Show welcome status
+            document.getElementById('localName').textContent = currentUser.username;
+            console.log('%c✅ Logged in as ' + currentUser.username, 'color:#00d4ff; font-weight:bold');
+        }
 
-function recoverWithQuestion() {
-    alert("Security question recovery is still powered by GunDB (as before).\n\nEnter your username and answer the question you set during registration.");
-    // You can extend this with the previous GunDB security Q&A logic
-}
+        function showProfile() {
+            alert(`👤 ${currentUser.username}\n🌍 ${currentUser.country} ${currentUser.flag}\n⚧ ${currentUser.gender}\n\nAvatar & profile stored in GenosDB`);
+        }
+
+        function recoverPassword() {
+            const username = prompt('Enter your username to recover:');
+            if (!username) return;
+            alert('Recovery uses GenosDB. In a real app you would answer a security question. For this demo, just remember your password.');
+        }
+
+        // ============== Video & P2P (webconnect.js) ==============
+        async function startLocalStream() {
+            if (localStream) return;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+            } catch (err) {
+                console.error(err);
+                alert('Camera / microphone access required');
+            }
+        }
+
+        async function startSearching() {
+            await startLocalStream();
+
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnStop').disabled = false;
+            document.getElementById('btnNext').disabled = false;
+
+            // Join a public mesh room (users discover each other via webconnect.js)
+            wc = new WebConnect({
+                room: 'projectcam-global-' + (Math.random().toString(36).slice(2)),
+                // You can change room name if you want private rooms later
+            });
+
+            wc.on('peer-joined', (peer) => {
+                if (!currentPeerId) {
+                    currentPeerId = peer.id;
+                    document.getElementById('chatPeer').textContent = 'Connected ✓';
+                    document.getElementById('remoteName').textContent = 'Peer ' + peer.id.slice(0, 8);
+                    document.getElementById('remoteStatus').classList.remove('hidden');
+                }
+            });
+
+            wc.on('stream', (stream, peerId) => {
+                if (peerId === currentPeerId || !remoteVideo.srcObject) {
+                    remoteVideo.srcObject = stream;
+                }
+            });
+
+            wc.on('data', (data, peerId) => {
+                if (peerId === currentPeerId) addMessage(data, 'remote');
+            });
+
+            // Share our camera
+            wc.addStream(localStream);
+
+            console.log('🔍 Looking for random registered users via webconnect.js mesh...');
+        }
+
+        function stopConnection() {
+            if (wc) wc.destroy();
+            wc = null;
+            currentPeerId = null;
+            remoteVideo.srcObject = null;
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('btnNext').disabled = true;
+            document.getElementById('chatPeer').textContent = 'Waiting for peer...';
+            document.getElementById('remoteStatus').classList.add('hidden');
+        }
+
+        function nextPeer() {
+            addMessage('⏭️ You skipped to next stranger', 'local');
+            stopConnection();
+            setTimeout(() => startSearching(), 700);
+        }
+
+        function toggleCamera() {
+            if (!localStream) return;
+            const track = localStream.getVideoTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                document.getElementById('camBtn').textContent = track.enabled ? '📷 ON' : '📷 OFF';
+            }
+        }
+
+        function toggleMic() {
+            if (!localStream) return;
+            const track = localStream.getAudioTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                document.getElementById('micBtn').textContent = track.enabled ? '🎤 ON' : '🎤 OFF';
+            }
+        }
+
+        // ============== Chat ==============
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !wc) return;
+
+            wc.sendData(text);
+            addMessage(text, 'local');
+            input.value = '';
+        }
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = text;
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // ============== INIT ==============
+        async function initializeApp() {
+            initTailwind();
+
+            // Load saved theme
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+            }
+
+            // Show login modal
+            document.getElementById('authModal').style.display = 'flex';
+
+            console.log('%c🚀 Projectcam ready – GenosDB + webconnect.js', 'color:#00d4ff; font-size:13px');
+        }
+
+        window.onload = initializeApp;
     </script>
 </body>
 </html>

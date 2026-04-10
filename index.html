@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Projectcam</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
@@ -39,21 +41,10 @@
                 <button onclick="toggleTheme()" class="text-2xl px-3 py-2 hover:bg-zinc-800 rounded-xl">🌗</button>
 
                 <div class="flex gap-2">
-                    <button onclick="startRandom()" id="btnStart" 
-                            class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">
-                        ▶️ Start Random
-                    </button>
-                    <button onclick="stopConnection()" id="btnStop" disabled
-                            class="px-7 py-3 bg-red-500 hover:bg-red-600 rounded-3xl font-semibold flex items-center gap-2">
-                        ⏹️ Stop
-                    </button>
-                    <button onclick="nextPeer()" id="btnNext" disabled
-                            class="px-7 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-semibold flex items-center gap-2">
-                        ⏭️ Next
-                    </button>
-                    <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">
-                        Logout
-                    </button>
+                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Start Random</button>
+                    <button onclick="stopConnection()" id="btnStop" disabled class="px-7 py-3 bg-red-500 hover:bg-red-600 rounded-3xl font-semibold flex items-center gap-2">⏹️ Stop</button>
+                    <button onclick="nextPeer()" id="btnNext" disabled class="px-7 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-semibold flex items-center gap-2">⏭️ Next</button>
+                    <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Logout</button>
                 </div>
             </div>
         </div>
@@ -149,66 +140,50 @@
 
                     <div>
                         <label class="text-xs text-zinc-400 block mb-1">Room Name</label>
-                        <input id="roomName" type="text" placeholder="My Chill Room" maxlength="30"
-                               class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                        <input id="roomName" type="text" placeholder="My Chill Room" maxlength="30" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                     </div>
 
                     <div>
                         <label class="text-xs text-zinc-400 block mb-1">Intro / About Me (max 50 chars)</label>
-                        <input id="intro" type="text" placeholder="Just here to chat..." maxlength="50"
-                               class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                        <input id="intro" type="text" placeholder="Just here to chat..." maxlength="50" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                     </div>
 
                     <div>
                         <label class="text-xs text-zinc-400 block mb-1">Security Question</label>
-                        <input id="securityQuestion" type="text" placeholder="What was your first pet's name?" 
-                               class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                        <input id="securityQuestion" type="text" placeholder="What was your first pet's name?" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                     </div>
                 </div>
 
-                <button onclick="handleAuth()" id="authBtn"
-                        class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-3xl text-lg transition">
+                <button onclick="handleAuth()" id="authBtn" class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-3xl text-lg transition">
                     Login
                 </button>
 
                 <div class="flex justify-between text-sm pt-2">
-                    <button onclick="toggleRegister()" id="toggleBtn" class="text-cyan-400 hover:underline">
-                        Create new account
-                    </button>
-                    <button onclick="showForgotPassword()" class="text-zinc-400 hover:text-white">
-                        Forgot password?
-                    </button>
+                    <button onclick="toggleRegister()" id="toggleBtn" class="text-cyan-400 hover:underline">Create new account</button>
+                    <button onclick="showForgotPassword()" class="text-zinc-400 hover:text-white">Forgot password?</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script type="module">
-        import { gdb } from "https://cdn.jsdelivr.net/npm/genosdb@latest/dist/index.min.js";
+    <script>
+        // GunDB Setup
+        const gun = Gun({
+            peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://gunjs.herokuapp.com/gun']
+        });
+        const user = gun.user();
 
-        window.db = null;
         window.currentUser = null;
         window.wc = null;
         window.localStream = null;
-        window.currentPeerId = null;
-        window.avatarBase64 = null;
         window.isRegisterMode = false;
+        window.avatarBase64 = null;
 
         const doorbell = new Audio('https://freesound.org/data/previews/276/276951_5123854-lq.mp3');
-
-        async function initDB() {
-            if (!window.db) {
-                window.db = await gdb('projectcam', { rtc: true });
-            }
-        }
 
         function hash(str) {
             return btoa(str + "projectcam_salt_2026");
         }
-    </script>
-
-    <script>
-        // All functions below are global so onclick works
 
         function toggleRegister() {
             window.isRegisterMode = !window.isRegisterMode;
@@ -224,42 +199,39 @@
 
             if (!username || !password) return alert("Username and password are required");
 
-            try {
-                await initDB();
+            if (window.isRegisterMode) {
+                const roomName = document.getElementById('roomName').value.trim() || username + "'s Room";
+                const intro = document.getElementById('intro').value.trim().slice(0, 50);
+                const gender = document.getElementById('gender').value;
+                const securityQ = document.getElementById('securityQuestion').value.trim();
 
-                if (window.isRegisterMode) {
-                    const roomName = document.getElementById('roomName').value.trim() || username + "'s Room";
-                    const intro = document.getElementById('intro').value.trim().slice(0, 50);
-                    const gender = document.getElementById('gender').value;
-                    const securityQ = document.getElementById('securityQuestion').value.trim();
+                if (!securityQ) return alert("Security question is required");
 
-                    if (!securityQ) return alert("Security question is required");
-
-                    window.currentUser = {
-                        username,
-                        passwordHash: hash(password),
-                        avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
-                        gender,
-                        roomName,
-                        intro,
-                        securityQuestion: securityQ,
-                        created: Date.now()
-                    };
-
-                    await window.db.put(`users/${username}`, window.currentUser);
-                    finishLogin();
-                } else {
-                    const userData = await window.db.get(`users/${username}`);
-                    if (userData && userData.passwordHash === hash(password)) {
+                user.create(username, password, (ack) => {
+                    if (ack.err) return alert(ack.err);
+                    user.auth(username, password, () => {
+                        const userData = {
+                            username,
+                            avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
+                            gender,
+                            roomName,
+                            intro,
+                            securityQuestion: securityQ,
+                            created: Date.now()
+                        };
+                        gun.get(`users/${username}`).put(userData);
                         window.currentUser = userData;
                         finishLogin();
-                    } else {
-                        alert("Incorrect username or password");
-                    }
-                }
-            } catch (err) {
-                console.error(err);
-                alert("Database error. Please try again.");
+                    });
+                });
+            } else {
+                user.auth(username, password, (ack) => {
+                    if (ack.err) return alert("Incorrect username or password");
+                    gun.get(`users/${username}`).once((data) => {
+                        window.currentUser = data || { username };
+                        finishLogin();
+                    });
+                });
             }
         }
 
@@ -276,12 +248,10 @@
         function showForgotPassword() {
             const username = prompt("Enter your username:");
             if (!username) return;
-            initDB().then(() => {
-                window.db.get(`users/${username}`).then(userData => {
-                    if (!userData) return alert("User not found");
-                    const answer = prompt(userData.securityQuestion + "\n\nEnter your answer:");
-                    if (answer) alert("Demo mode: If the answer is correct, you can reset your password.");
-                });
+            gun.get(`users/${username}`).once((data) => {
+                if (!data || !data.securityQuestion) return alert("No recovery data found.");
+                const answer = prompt(data.securityQuestion + "\n\nEnter your answer:");
+                if (answer) alert("Demo mode: If correct, you can reset your password.");
             });
         }
 
@@ -313,12 +283,10 @@
 
         // ================== ROOMS GRID ==================
         async function loadRooms() {
-            await initDB();
-            const users = await window.db.get('users') || {};
             const grid = document.getElementById('roomsGrid');
             grid.innerHTML = '';
 
-            Object.values(users).forEach(u => {
+            gun.get('users').map().once((u, key) => {
                 if (!u || !u.roomName) return;
 
                 const card = document.createElement('div');
@@ -337,7 +305,7 @@
                         </div>
                     </div>
                 `;
-                card.onclick = () => joinRoom(u.username);
+                card.onclick = () => joinRoom(key);
                 grid.appendChild(card);
             });
         }
@@ -349,13 +317,13 @@
             });
         }
 
-        async function joinRoom(hostUsername) {
+        async function joinRoom(hostKey) {
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('videoView').classList.remove('hidden');
 
             await startLocalStream();
 
-            window.wc = new WebConnect({ room: `projectcam-room-${hostUsername}` });
+            window.wc = new WebConnect({ room: `projectcam-room-${hostKey}` });
 
             window.wc.on('peer-joined', () => {
                 doorbell.play();

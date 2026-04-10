@@ -16,7 +16,7 @@
         .message.local { background: #22d3ee; color: #111; border-bottom-right-radius: 4px; }
         .message.remote { background: #27272a; border-bottom-left-radius: 4px; }
         .room-card { transition: all 0.2s; }
-        .room-card:hover { transform: scale(1.03); box-shadow: 0 0 0 3px #22d3ee; }
+        .room-card:hover { transform: scale(1.03); }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100">
@@ -50,7 +50,7 @@
         </div>
     </header>
 
-    <!-- DASHBOARD (Rooms Grid) -->
+    <!-- DASHBOARD -->
     <div id="dashboard" class="max-w-screen-2xl mx-auto p-6">
         <input id="searchInput" type="text" placeholder="Search rooms or usernames..." 
                class="w-full bg-zinc-900 border border-zinc-700 rounded-3xl px-6 py-4 text-lg focus:border-cyan-400 outline-none mb-8"
@@ -63,7 +63,6 @@
     <div id="videoView" class="hidden max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
-                <!-- Local -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
@@ -75,15 +74,13 @@
                     </div>
                 </div>
 
-                <!-- Remote -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
-                    <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium">
+                    <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium bg-black/70">
                         Waiting for peer...
                     </div>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">Stranger</div>
                     
-                    <!-- Owner Kick Button -->
                     <button onclick="kickPeer()" id="kickBtn" 
                             class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">
                         Kick Peer
@@ -92,7 +89,6 @@
             </div>
         </div>
 
-        <!-- Chat -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
             <div class="p-5 border-b border-zinc-700 font-medium">P2P Chat</div>
             <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-zinc-950"></div>
@@ -176,16 +172,15 @@
     </div>
 
     <script>
-        // GunDB Setup
         const gun = Gun({ peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://gunjs.herokuapp.com/gun'] });
-        const user = gun.user();
+        const userGun = gun.user();
 
         window.currentUser = null;
         window.wc = null;
         window.localStream = null;
         window.isRegisterMode = false;
         window.avatarBase64 = null;
-        window.isOwner = false;           // true if current user is owner of active room
+        window.isOwner = false;
         window.activeRoomKey = null;
 
         const doorbell = new Audio('https://freesound.org/data/previews/276/276951_5123854-lq.mp3');
@@ -214,17 +209,26 @@
 
                 if (!securityQ) return alert("Security question is required");
 
-                user.create(username, password, ack => {
+                userGun.create(username, password, ack => {
                     if (ack.err) return alert(ack.err);
-                    user.auth(username, password, () => {
-                        const data = { username, avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80", gender, roomName, intro, securityQuestion: securityQ, created: Date.now() };
+                    userGun.auth(username, password, () => {
+                        const data = {
+                            username,
+                            avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
+                            gender,
+                            roomName,
+                            intro,
+                            securityQuestion: securityQ,
+                            created: Date.now(),
+                            status: "open"   // default status
+                        };
                         gun.get(`users/${username}`).put(data);
                         window.currentUser = data;
                         finishLogin();
                     });
                 });
             } else {
-                user.auth(username, password, ack => {
+                userGun.auth(username, password, ack => {
                     if (ack.err) return alert("Incorrect username or password");
                     gun.get(`users/${username}`).once(data => {
                         window.currentUser = data || { username };
@@ -250,7 +254,7 @@
             gun.get(`users/${username}`).once(data => {
                 if (!data) return alert("User not found");
                 const answer = prompt(data.securityQuestion + "\n\nEnter your answer:");
-                if (answer) alert("Demo mode - remember your password.");
+                if (answer) alert("Demo mode: Remember your password.");
             });
         }
 
@@ -280,17 +284,24 @@
             }
         }
 
-        // ================== ROOMS GRID ==================
+        // ================== ROOMS GRID WITH STATUS ==================
         function loadRooms() {
             const grid = document.getElementById('roomsGrid');
             grid.innerHTML = '';
+
             gun.get('users').map().once((u, key) => {
                 if (!u || !u.roomName) return;
+
+                const isOpen = u.status !== "occupied";
+
                 const card = document.createElement('div');
                 card.className = `room-card bg-zinc-900 border border-zinc-700 rounded-3xl p-5 cursor-pointer`;
                 card.innerHTML = `
-                    <div class="aspect-video bg-black rounded-2xl mb-4 overflow-hidden">
+                    <div class="aspect-video bg-black rounded-2xl mb-4 overflow-hidden relative">
                         <img src="${u.avatar}" class="w-full h-full object-cover">
+                        <div class="absolute top-3 right-3 px-3 py-1 text-xs font-medium rounded-full ${isOpen ? 'bg-emerald-500 text-black' : 'bg-red-500 text-white'}">
+                            ${isOpen ? 'Open' : 'Occupied'}
+                        </div>
                     </div>
                     <div class="font-semibold text-lg">${u.roomName}</div>
                     <div class="text-zinc-400 text-sm mt-1 line-clamp-2">${u.intro || 'No intro'}</div>
@@ -325,7 +336,7 @@
             document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
         }
 
-        // ================== JOIN / VIDEO ==================
+        // ================== JOIN ROOM ==================
         async function startLocalStream() {
             if (window.localStream) return;
             window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -344,6 +355,20 @@
                 document.getElementById('remotePlaceholder').style.display = 'none';
                 document.getElementById('remoteName').textContent = "Peer connected";
                 document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
+
+                // Mark room as occupied if owner
+                if (window.isOwner) {
+                    gun.get(`users/${hostKey}`).put({ status: "occupied" });
+                }
+            });
+
+            window.wc.on('peer-left', () => {
+                document.getElementById('remotePlaceholder').style.display = 'flex';
+                document.getElementById('remoteName').textContent = "Stranger";
+                document.getElementById('kickBtn').classList.add('hidden');
+                if (window.isOwner) {
+                    gun.get(`users/${hostKey}`).put({ status: "open" });
+                }
             });
 
             window.wc.on('stream', (stream) => {
@@ -432,7 +457,7 @@
             document.documentElement.classList.toggle('dark');
         }
 
-        // Init
+        // Initialize
         window.onload = () => {
             document.getElementById('authModal').style.display = 'flex';
         };

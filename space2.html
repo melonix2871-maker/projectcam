@@ -8,23 +8,20 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/reconnecting-websocket/1.0.0/reconnecting-websocket.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    :root { --accent: #ff6b6b; }
-    * { box-sizing: border-box; }
     body {
       margin: 0; padding: 0;
       background: radial-gradient(circle at 30% 20%, #0a0a1a, #020208);
       color: #f0f0f0;
       font-family: 'Inter', system-ui, sans-serif;
-      overflow: hidden;
       height: 100dvh;
+      overflow: hidden;
     }
     .container { max-width: 1480px; margin: 0 auto; padding: 12px; height: 100dvh; display: flex; flex-direction: column; }
-    h1 { text-align: center; font-size: clamp(1.8rem, 5vw, 2.8rem); background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 4px; font-weight: 700; }
-    .sub { text-align: center; font-size: 0.95rem; opacity: 0.7; margin-bottom: 16px; }
-    .info-card { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border-radius: 16px; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 0.9rem; margin-bottom: 20px; }
-    .room-badge { background: #ff6b6b; color: #fff; padding: 2px 12px; border-radius: 9999px; font-weight: 600; font-size: 0.85rem; }
+    h1 { text-align: center; font-size: clamp(1.8rem, 5vw, 2.8rem); background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .info-card { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border-radius: 16px; padding: 12px 20px; display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+    .room-badge { background: #ff6b6b; color: #fff; padding: 4px 14px; border-radius: 9999px; font-weight: 600; }
     .share-box { background: rgba(255,255,255,0.1); padding: 14px; border-radius: 12px; margin: 12px 0; text-align: center; }
-    .video-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; min-height: 0; }
+    .video-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
     .video-wrapper { background: #111; border-radius: 20px; overflow: hidden; position: relative; aspect-ratio: 16/9; }
     video { width: 100%; height: 100%; object-fit: cover; }
     .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.7); color: white; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; }
@@ -33,8 +30,6 @@
     button { padding: 10px 20px; border: none; border-radius: 9999px; font-weight: 600; cursor: pointer; }
     .danger-btn { background: #ff4757; color: white; }
     .kick-btn { background: #ff4757; color: white; }
-    .status-waiting { color: #ffd700; font-weight: 600; }
-    .status-full { color: #ff4757; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -44,7 +39,7 @@
 
   <div class="info-card">
     <span>Room:</span> <span class="room-badge" id="roomDisplay">Loading...</span>
-    <span id="status" class="status-connected">Initializing...</span>
+    <span id="status">Initializing...</span>
     <span class="pill">Role: <span id="nodeRoleStat">none</span></span>
   </div>
 
@@ -54,24 +49,18 @@
     <button onclick="copyLink()" style="padding:10px 16px;">📋 Copy</button>
   </div>
 
-  <div class="video-section">
-    <div class="video-grid" id="videoGrid"></div>
-    <div class="control-bar" id="controlBar" style="display:none;">
-      <button id="stopBtn" class="danger-btn">⏹️ Stop</button>
-      <button id="muteMicABtn">🎤 Mute</button>
-      <button id="kickGuestBtn" class="kick-btn" style="display:none;">👢 Kick Guest</button>
-      <select id="qualitySelect">
-        <option value="high">720p</option>
-        <option value="medium" selected>540p</option>
-        <option value="low">360p</option>
-      </select>
-    </div>
+  <div class="video-grid" id="videoGrid"></div>
+
+  <div class="control-bar" id="controlBar" style="display:none;">
+    <button id="stopBtn" class="danger-btn">⏹️ Stop</button>
+    <button id="muteBtn">🎤 Mute</button>
+    <button id="kickGuestBtn" class="kick-btn" style="display:none;">👢 Kick Guest</button>
   </div>
 
-  <div class="chat-section" style="margin-top:15px;">
-    <div class="chat-header">💬 Chat</div>
-    <div class="chat-messages" id="chatMessages" style="height:180px; overflow-y:auto; padding:15px;"></div>
-    <div class="chat-input-area" id="chatInputArea" style="display:none; padding:10px;">
+  <div style="margin-top:15px;">
+    <div style="font-weight:600; margin-bottom:8px;">💬 Chat</div>
+    <div id="chatMessages" style="height:160px; overflow-y:auto; background:rgba(255,255,255,0.05); padding:10px; border-radius:12px;"></div>
+    <div style="margin-top:8px; display:flex; gap:8px;">
       <input id="chatInput" placeholder="Type message..." style="flex:1; padding:12px; border-radius:9999px; border:none; background:rgba(255,255,255,0.1); color:white;">
       <button id="sendChatBtn">Send</button>
     </div>
@@ -90,23 +79,20 @@
   let localStream = null;
   let myRole = null;           // "host" or "guest"
   let myConnectId = null;
-  let remotePeerId = null;
+  let remoteStreamShown = false;
   let myName = `User_${Math.random().toString(36).slice(2,6)}`;
 
   const doorbell = new Audio("https://www.soundjay.com/door_c2026/doorbell-6.mp3");
   let hasPlayedDoorbell = false;
-  let remoteStreamShown = false;
 
-  function setStatus(msg, type = "connected") {
-    const el = document.getElementById("status");
-    el.textContent = msg;
-    el.className = type === "waiting" ? "status-waiting" : type === "full" ? "status-full" : "status-connected";
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
   }
 
   function createVideo(stream, label, muted = false) {
     const wrapper = document.createElement("div");
     wrapper.className = "video-wrapper";
-    wrapper.innerHTML = `<video autoplay playsinline ${muted?'muted':''}></video><div class="video-label">${label}</div>`;
+    wrapper.innerHTML = `<video autoplay playsinline ${muted ? 'muted' : ''}></video><div class="video-label">${label}</div>`;
     wrapper.querySelector("video").srcObject = stream;
     document.getElementById("videoGrid").appendChild(wrapper);
   }
@@ -120,52 +106,44 @@
   }
 
   async function initWebConnect() {
-    if (webConnect) return;
-    try {
-      webConnect = webconnect({
-        appName: "FannaloBroadcast",
-        channelName: roomId,
-        connectPassword: "entice2026",
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:stun.cloudflare.com:3478" },
-          { urls: "stun:stun.metered.ca:3478" }
-        ]
-      });
+    webConnect = webconnect({
+      appName: "FannaloBroadcast",
+      channelName: roomId,
+      connectPassword: "entice2026",
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun.cloudflare.com:3478" },
+        { urls: "stun:stun.metered.ca:3478" }
+      ]
+    });
 
-      webConnect.getMyId(attr => myConnectId = attr.connectId);
+    webConnect.getMyId(attr => myConnectId = attr.connectId);
 
-      webConnect.onConnect(attr => {
-        if (localStream) webConnect.openStreaming(localStream, { connectId: attr.connectId });
-      });
+    webConnect.onConnect(attr => {
+      if (localStream) webConnect.openStreaming(localStream, { connectId: attr.connectId });
+    });
 
-      webConnect.onStreaming((stream, attr) => {
-        if (attr.connectId === myConnectId || remoteStreamShown) return;
+    webConnect.onStreaming((stream, attr) => {
+      if (attr.connectId === myConnectId || remoteStreamShown) return;
+      remoteStreamShown = true;
 
-        remoteStreamShown = true;
-        const waiting = document.getElementById("waitingBox");
-        if (waiting) waiting.remove();
+      const waiting = document.getElementById("waitingBox");
+      if (waiting) waiting.remove();
 
-        createVideo(stream, myRole === "host" ? "Guest" : "Host");
+      createVideo(stream, myRole === "host" ? "Guest" : "Host");
 
-        if (!hasPlayedDoorbell) {
-          hasPlayedDoorbell = true;
-          doorbell.play().catch(() => {});
-        }
+      if (!hasPlayedDoorbell) {
+        hasPlayedDoorbell = true;
+        doorbell.play().catch(() => {});
+      }
 
-        setStatus("✅ Both cameras connected", "broadcast");
-        if (myRole === "host") document.getElementById("kickGuestBtn").style.display = "inline-block";
-      });
-
-    } catch (e) {
-      console.error(e);
-      setStatus("Connection error", "waiting");
-    }
+      setStatus("✅ Both cameras connected");
+      if (myRole === "host") document.getElementById("kickGuestBtn").style.display = "inline-block";
+    });
   }
 
-  // Host
+  // Start as Host
   async function startHost() {
     myRole = "host";
     document.getElementById("nodeRoleStat").textContent = "Host";
@@ -175,39 +153,40 @@
 
     showWaiting();
     document.getElementById("controlBar").style.display = "flex";
-    document.getElementById("chatInputArea").style.display = "flex";
     document.getElementById("shareBox").style.display = "block";
 
     const guestLink = `${window.location.origin}${window.location.pathname}?room=${roomId}&guest=1`;
     document.getElementById("shareLink").value = guestLink;
 
     await initWebConnect();
-    setStatus("Waiting for guest...", "waiting");
+    setStatus("Waiting for guest...");
   }
 
-  // Guest
+  // Start as Guest
   async function startGuest() {
     myRole = "guest";
     document.getElementById("nodeRoleStat").textContent = "Guest";
+
+    // Guest also turns on their camera
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    createVideo(localStream, "You (Guest)", true);
+
     await initWebConnect();
-    setStatus("Connecting to host...", "waiting");
+    setStatus("Connecting to host...");
   }
 
   function copyLink() {
     const link = document.getElementById("shareLink");
     link.select();
     document.execCommand("copy");
-    alert("Link copied to clipboard!");
+    alert("Link copied!");
   }
 
   function kickGuest() {
-    if (confirm("Kick the guest?")) {
-      if (webConnect) webConnect.Disconnect();
-      location.reload();
-    }
+    if (confirm("Kick the guest?")) location.reload();
   }
 
-  // Main start
+  // Main
   async function startApp() {
     if (isHost) {
       await startHost();
@@ -215,38 +194,19 @@
       await startGuest();
     } else {
       document.getElementById("videoGrid").innerHTML = `<div style="color:#ff4757;text-align:center;padding:100px;font-size:1.5rem;">Not available.<br>Try again later.</div>`;
-      setStatus("Room is full", "full");
     }
   }
 
-  // Event listeners
+  // Buttons
   document.getElementById("stopBtn").onclick = () => location.reload();
   document.getElementById("kickGuestBtn").onclick = kickGuest;
-  document.getElementById("muteMicABtn").onclick = () => {
+  document.getElementById("muteBtn").onclick = () => {
     if (localStream) {
       const enabled = !localStream.getAudioTracks()[0].enabled;
       localStream.getAudioTracks().forEach(t => t.enabled = enabled);
-      document.getElementById("muteMicABtn").textContent = enabled ? "🎤 Mute" : "🎤 Unmute";
+      document.getElementById("muteBtn").textContent = enabled ? "🎤 Mute" : "🎤 Unmute";
     }
   };
-
-  const chatInput = document.getElementById("chatInput");
-  document.getElementById("sendChatBtn").onclick = () => {
-    if (chatInput.value && webConnect) {
-      webConnect.Send(chatInput.value, { connectId: null });
-      addChatMessage(chatInput.value, true);
-      chatInput.value = "";
-    }
-  };
-
-  function addChatMessage(text, isSelf) {
-    const container = document.getElementById("chatMessages");
-    const div = document.createElement("div");
-    div.className = `chat-message ${isSelf ? "self" : ""}`;
-    div.textContent = text;
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-  }
 
   startApp();
 </script>

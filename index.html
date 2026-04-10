@@ -37,20 +37,23 @@
                         <div id="headerRoomName" class="text-xs text-zinc-400"></div>
                     </div>
                 </div>
+
                 <button onclick="toggleTheme()" class="text-2xl px-3 py-2 hover:bg-zinc-800 rounded-xl">🌗</button>
+
                 <div class="flex gap-2">
-                    <button onclick="showDashboard()" class="px-5 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Discover</button>
-                    <button onclick="showMyRoom()" class="px-5 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-medium">My Room</button>
-                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold">▶️ Random</button>
+                    <button onclick="showDashboard()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Discover Rooms</button>
+                    <button onclick="showMyRoom()" class="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-medium">My Room</button>
+                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Random</button>
                     <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Logout</button>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- DASHBOARD -->
+    <!-- DASHBOARD - Discover Rooms -->
     <div id="dashboard" class="max-w-screen-2xl mx-auto p-6">
-        <input id="searchInput" type="text" placeholder="Search rooms..." 
+        <h2 class="text-2xl font-semibold mb-6">Discover Rooms</h2>
+        <input id="searchInput" type="text" placeholder="Search rooms or usernames..." 
                class="w-full bg-zinc-900 border border-zinc-700 rounded-3xl px-6 py-4 text-lg focus:border-cyan-400 outline-none mb-8"
                onkeyup="filterRooms()">
 
@@ -61,10 +64,11 @@
     <div id="videoView" class="hidden max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
+                <!-- Local -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
-                        <span id="localName">You (cam1)</span>
+                        <span id="localName">cam1 - You</span>
                     </div>
                     <div class="absolute bottom-6 left-6 flex gap-3">
                         <button onclick="toggleCamera()" id="camBtn" class="bg-black/70 px-6 py-3 rounded-3xl text-sm">📷 ON</button>
@@ -72,6 +76,7 @@
                     </div>
                 </div>
 
+                <!-- Remote -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
                     <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium bg-black/70">
@@ -83,6 +88,7 @@
             </div>
         </div>
 
+        <!-- Chat -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
             <div class="p-5 border-b border-zinc-700 font-medium">P2P Chat</div>
             <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-zinc-950"></div>
@@ -166,12 +172,13 @@
     </div>
 
     <script>
-        // GunDB Setup
+        // GunDB with multiple global relays
         const gun = Gun({
             peers: [
                 'https://gun-manhattan.herokuapp.com/gun',
                 'https://gunjs.herokuapp.com/gun',
-                'https://relay.peer.ooo/gun'
+                'https://relay.peer.ooo/gun',
+                'https://gun-relay.herokuapp.com/gun'
             ]
         });
         const userGun = gun.user();
@@ -211,8 +218,7 @@
 
                 userGun.create(username, password, ack => {
                     if (ack.err) {
-                        if (ack.err.includes("already")) alert("Username already taken. Try logging in.");
-                        else alert(ack.err);
+                        alert(ack.err.includes("already") ? "Username already taken. Please login." : ack.err);
                         return;
                     }
                     userGun.auth(username, password, () => {
@@ -258,7 +264,7 @@
             gun.get(`users/${username}`).once(data => {
                 if (!data) return alert("User not found");
                 const answer = prompt(data.securityQuestion + "\n\nEnter your answer:");
-                if (answer) alert("If the answer is correct, you can reset your password in a real app.");
+                if (answer) alert("Demo mode - remember your password.");
             });
         }
 
@@ -275,7 +281,7 @@
 
         function showProfile() {
             if (!window.currentUser) return;
-            alert(`Username: ${window.currentUser.username}\nRoom: ${window.currentUser.roomName}\nIntro: ${window.currentUser.intro || 'None'}`);
+            alert(`👤 ${window.currentUser.username}\nRoom: ${window.currentUser.roomName}\nIntro: ${window.currentUser.intro || 'None'}`);
         }
 
         function logout() {
@@ -288,7 +294,7 @@
             }
         }
 
-        // Load Rooms
+        // Load Discover Rooms
         function loadRooms() {
             const grid = document.getElementById('roomsGrid');
             grid.innerHTML = '';
@@ -361,6 +367,7 @@
                 document.getElementById('remotePlaceholder').style.display = 'none';
                 document.getElementById('remoteName').textContent = "cam2 - Guest";
                 document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
+
                 if (window.isOwner) gun.get(`users/${hostKey}`).put({ status: "occupied" });
             });
 

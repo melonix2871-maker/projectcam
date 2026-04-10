@@ -3,160 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Omegle-style Random Video Chat</title>
+    <title>Pure P2P Video Chat - webconnect.js</title>
+    <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
     <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #111;
-            color: #fff;
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-        .container {
-            display: flex;
-            width: 100%;
-            height: 100%;
-        }
-        .video-section {
-            flex: 4;
-            display: flex;
-            flex-direction: column;
-            padding: 15px;
-            background: #1a1a1a;
-            gap: 12px;
-        }
-        .chat-section {
-            flex: 6;
-            display: flex;
-            flex-direction: column;
-            background: #222;
-            border-left: 2px solid #333;
-        }
-        video {
-            width: 100%;
-            background: #000;
-            border-radius: 10px;
-            object-fit: cover;
-        }
-        .local-video { height: 42%; }
-        .remote-video { height: 58%; }
-
-        .video-wrapper {
-            position: relative;
-        }
-        .name-label {
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            background: rgba(0,0,0,0.7);
-            padding: 5px 12px;
-            border-radius: 6px;
-            font-size: 14px;
-            z-index: 10;
-        }
-
-        .controls {
-            display: flex;
-            gap: 12px;
-            margin-top: 15px;
-            justify-content: center;
-        }
-        button {
-            padding: 12px 28px;
-            font-size: 16px;
-            border: none;
-            border-radius: 30px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .btn-start { background: #28a745; color: white; }
-        .btn-stop  { background: #dc3545; color: white; }
-        .btn-next  { background: #007bff; color: white; }
-
-        .status {
-            padding: 12px;
-            text-align: center;
-            font-size: 15px;
-            background: #222;
-            border-radius: 6px;
-            margin-top: 8px;
-        }
-
-        .chat-header {
-            padding: 15px;
-            background: #1a1a1a;
-            border-bottom: 1px solid #333;
-            font-weight: bold;
-        }
-        .messages {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            background: #1a1a1a;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .message {
-            max-width: 80%;
-            padding: 10px 14px;
-            border-radius: 18px;
-            word-wrap: break-word;
-        }
-        .message.local  { align-self: flex-end; background: #007bff; color: white; }
-        .message.remote { align-self: flex-start; background: #333; }
-
-        .chat-input {
-            padding: 15px;
-            background: #1a1a1a;
-            display: flex;
-            gap: 10px;
-            border-top: 1px solid #333;
-        }
-        input {
-            flex: 1;
-            padding: 12px 18px;
-            border: none;
-            border-radius: 25px;
-            background: #333;
-            color: white;
-        }
-        button.send-btn {
-            padding: 12px 24px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 25px;
-        }
+        body { margin:0; font-family: Arial, sans-serif; background:#111; color:#fff; display:flex; height:100vh; overflow:hidden; }
+        .container { display:flex; width:100%; height:100%; }
+        .video-section { flex:4; padding:15px; background:#1a1a1a; display:flex; flex-direction:column; gap:12px; }
+        .chat-section { flex:6; display:flex; flex-direction:column; background:#222; border-left:2px solid #333; }
+        video { width:100%; background:#000; border-radius:10px; object-fit:cover; }
+        .local-video { height:42%; }
+        .remote-video { height:58%; }
+        .video-wrapper { position:relative; }
+        .name-label { position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.7); padding:6px 14px; border-radius:6px; font-size:14px; z-index:10; }
+        .controls { display:flex; gap:12px; margin-top:15px; justify-content:center; flex-wrap:wrap; }
+        button { padding:12px 24px; font-size:16px; border:none; border-radius:30px; cursor:pointer; font-weight:bold; }
+        .btn-start { background:#28a745; color:white; }
+        .btn-stop  { background:#dc3545; color:white; }
+        .btn-next  { background:#007bff; color:white; }
+        .status { padding:12px; text-align:center; font-size:15px; background:#222; border-radius:6px; margin-top:8px; }
+        .chat-header { padding:15px; background:#1a1a1a; border-bottom:1px solid #333; font-weight:bold; }
+        .messages { flex:1; padding:15px; overflow-y:auto; background:#1a1a1a; display:flex; flex-direction:column; gap:10px; }
+        .message { max-width:80%; padding:10px 14px; border-radius:18px; word-wrap:break-word; }
+        .message.local  { align-self:flex-end; background:#007bff; color:white; }
+        .message.remote { align-self:flex-start; background:#333; }
+        .chat-input { padding:15px; background:#1a1a1a; display:flex; gap:10px; border-top:1px solid #333; }
+        input { flex:1; padding:12px 18px; border:none; border-radius:25px; background:#333; color:white; }
+        .send-btn { padding:12px 24px; background:#007bff; color:white; border:none; border-radius:25px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Left: Videos + Controls -->
+        <!-- Videos -->
         <div class="video-section">
             <div class="video-wrapper">
                 <div class="name-label" id="local-name">You</div>
                 <video id="localVideo" class="local-video" autoplay muted playsinline></video>
             </div>
             <div class="video-wrapper">
-                <div class="name-label" id="remote-name">Stranger</div>
+                <div class="name-label" id="remote-name">Connected Peer</div>
                 <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
             </div>
 
-            <div class="status" id="status">Click **Start** to find a random stranger</div>
+            <div class="status" id="status">Click Start to join P2P mesh</div>
 
             <div class="controls">
-                <button class="btn-start" id="btnStart" onclick="startSearching()">Start</button>
+                <button class="btn-start" id="btnStart" onclick="startConnection()">Start</button>
                 <button class="btn-stop"  id="btnStop"  onclick="stopConnection()" disabled>Stop</button>
-                <button class="btn-next"  id="btnNext"  onclick="nextStranger()" disabled>Next</button>
+                <button class="btn-next"  id="btnNext"  onclick="nextPeer()" disabled>Next</button>
             </div>
         </div>
 
-        <!-- Right: Chat -->
+        <!-- Chat -->
         <div class="chat-section">
-            <div class="chat-header">Live P2P Chat</div>
+            <div class="chat-header">P2P Data Channel Chat</div>
             <div class="messages" id="messages"></div>
             <div class="chat-input">
                 <input type="text" id="chatInput" placeholder="Type a message..." disabled>
@@ -166,23 +65,10 @@
     </div>
 
     <script>
-        // ================== CONFIG ==================
-        const SIGNALING_URL = 'wss://your-signaling-server.com'; // ← CHANGE THIS to your own server
-        const iceConfig = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        };
-
-        // ================== VARIABLES ==================
+        let wc = null;
         let localStream = null;
-        let peerConnection = null;
+        let currentPeerId = null;
         let dataChannel = null;
-        let socket = null;
-        let mySocketId = null;
-        let isConnected = false;
-        let isSearching = false;
 
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
@@ -190,17 +76,96 @@
         const messagesEl = document.getElementById('messages');
         const chatInput = document.getElementById('chatInput');
 
-        // ================== UI HELPERS ==================
-        function updateButtons() {
-            document.getElementById('btnStart').disabled = isSearching || isConnected;
-            document.getElementById('btnStop').disabled = !isSearching && !isConnected;
-            document.getElementById('btnNext').disabled = !isConnected;
-            chatInput.disabled = !isConnected;
+        async function startLocalStream() {
+            if (localStream) return;
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
         }
 
-        function setStatus(text, color = '#aaa') {
-            statusEl.textContent = text;
-            statusEl.style.color = color;
+        async function startConnection() {
+            await startLocalStream();
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnStop').disabled = false;
+            document.getElementById('btnNext').disabled = false;
+            chatInput.disabled = false;
+
+            setStatus('Joining P2P mesh... (webconnect.js)', '#ffaa00');
+
+            // Initialize webconnect.js - you can change room name for "rooms"
+            wc = new WebConnect({
+                room: 'omegle-like-room',     // Change this to create different "rooms"
+                // You can add more options like signaling protocols if needed
+            });
+
+            wc.on('peer-joined', (peer) => {
+                console.log('New peer joined:', peer.id);
+                if (!currentPeerId) {
+                    currentPeerId = peer.id;
+                    setStatus('Connected to peer: ' + peer.id.substring(0,8), '#28a745');
+                    // For simplicity, we take the first peer as "remote"
+                    setupPeerConnection(peer);
+                }
+            });
+
+            wc.on('peer-left', (peerId) => {
+                if (peerId === currentPeerId) {
+                    setStatus('Peer disconnected', '#ff4444');
+                    currentPeerId = null;
+                    remoteVideo.srcObject = null;
+                }
+            });
+
+            // Handle incoming media / data
+            wc.on('stream', (stream, peerId) => {
+                if (peerId === currentPeerId || !remoteVideo.srcObject) {
+                    remoteVideo.srcObject = stream;
+                }
+            });
+
+            wc.on('data', (data, peerId) => {
+                if (peerId === currentPeerId) {
+                    addMessage(data, 'remote');
+                }
+            });
+
+            // Share our local stream to the mesh
+            wc.addStream(localStream);
+
+            setStatus('Waiting for peers in the mesh...', '#ffaa00');
+        }
+
+        function setupPeerConnection(peer) {
+            // webconnect.js handles most of the heavy lifting
+            console.log('Setting up with peer:', peer.id);
+        }
+
+        function stopConnection() {
+            if (wc) {
+                wc.destroy();
+                wc = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+            remoteVideo.srcObject = null;
+            currentPeerId = null;
+            resetUI();
+            setStatus('Connection stopped');
+        }
+
+        function nextPeer() {
+            addMessage('Skipping to next peer...', 'local');
+            stopConnection();
+            setTimeout(startConnection, 800);
+        }
+
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text || !wc) return;
+            wc.sendData(text);           // Broadcasts to all connected peers
+            addMessage(text, 'local');
+            chatInput.value = '';
         }
 
         function addMessage(text, type) {
@@ -211,190 +176,31 @@
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // ================== WEBRTC FUNCTIONS ==================
-        async function startLocalStream() {
-            if (localStream) return;
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                localVideo.srcObject = localStream;
-            } catch (err) {
-                console.error(err);
-                setStatus("Camera/Microphone access denied", "#ff4444");
-            }
+        function setStatus(text, color = '#aaa') {
+            statusEl.textContent = text;
+            statusEl.style.color = color;
         }
 
-        function createPeerConnection(isInitiator) {
-            peerConnection = new RTCPeerConnection(iceConfig);
-
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
-            });
-
-            peerConnection.ontrack = (e) => {
-                remoteVideo.srcObject = e.streams[0];
-            };
-
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate && socket) {
-                    socket.send(JSON.stringify({
-                        type: 'candidate',
-                        candidate: e.candidate
-                    }));
-                }
-            };
-
-            if (isInitiator) {
-                dataChannel = peerConnection.createDataChannel('chat');
-                setupDataChannel();
-                peerConnection.createOffer()
-                    .then(offer => peerConnection.setLocalDescription(offer))
-                    .then(() => {
-                        socket.send(JSON.stringify({
-                            type: 'offer',
-                            offer: peerConnection.localDescription
-                        }));
-                    });
-            } else {
-                peerConnection.ondatachannel = (e) => {
-                    dataChannel = e.channel;
-                    setupDataChannel();
-                };
-            }
+        function resetUI() {
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('btnNext').disabled = true;
+            chatInput.disabled = true;
         }
 
-        function setupDataChannel() {
-            dataChannel.onopen = () => {
-                console.log('Data channel opened');
-                isConnected = true;
-                setStatus('Connected with stranger ✓', '#28a745');
-                updateButtons();
-            };
-
-            dataChannel.onmessage = (e) => {
-                addMessage(e.data, 'remote');
-            };
-
-            dataChannel.onclose = () => {
-                isConnected = false;
-                updateButtons();
-            };
-        }
-
-        function closeConnection() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            if (dataChannel) {
-                dataChannel.close();
-                dataChannel = null;
-            }
-            remoteVideo.srcObject = null;
-            isConnected = false;
-            updateButtons();
-        }
-
-        // ================== SIGNALING ==================
-        function connectToSignaling() {
-            socket = new WebSocket(SIGNALING_URL);
-
-            socket.onopen = () => {
-                console.log('Connected to signaling server');
-            };
-
-            socket.onmessage = async (event) => {
-                const msg = JSON.parse(event.data);
-
-                if (msg.type === 'your-id') {
-                    mySocketId = msg.id;
-                }
-
-                if (msg.type === 'matched') {
-                    isSearching = false;
-                    setStatus('Matched! Establishing connection...');
-                    createPeerConnection(msg.isInitiator);
-                }
-
-                if (msg.type === 'offer') {
-                    if (!peerConnection) createPeerConnection(false);
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    socket.send(JSON.stringify({ type: 'answer', answer }));
-                }
-
-                if (msg.type === 'answer') {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.answer));
-                }
-
-                if (msg.type === 'candidate') {
-                    if (peerConnection) {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-                    }
-                }
-
-                if (msg.type === 'peer-disconnected') {
-                    setStatus('Stranger disconnected');
-                    closeConnection();
-                    addMessage('Stranger left the chat.', 'remote');
-                }
-            };
-
-            socket.onclose = () => {
-                setStatus('Disconnected from server. Refresh page.');
-            };
-        }
-
-        // ================== BUTTON ACTIONS ==================
-        async function startSearching() {
-            await startLocalStream();
-            if (!socket || socket.readyState !== WebSocket.OPEN) {
-                connectToSignaling();
-            }
-            socket.send(JSON.stringify({ type: 'find-match' }));
-            isSearching = true;
-            setStatus('Looking for a random stranger...');
-            updateButtons();
-        }
-
-        function stopConnection() {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'leave' }));
-            }
-            closeConnection();
-            isSearching = false;
-            setStatus('Stopped. Click Start to find someone new.');
-            updateButtons();
-        }
-
-        function nextStranger() {
-            addMessage('You skipped to next stranger.', 'local');
-            stopConnection();
-            // Small delay then start searching again
-            setTimeout(() => {
-                startSearching();
-            }, 600);
-        }
-
-        function sendMessage() {
-            if (!dataChannel || dataChannel.readyState !== 'open') return;
-            const text = chatInput.value.trim();
-            if (!text) return;
-
-            dataChannel.send(text);
-            addMessage(text, 'local');
-            chatInput.value = '';
-        }
-
-        // Enter key support
-        chatInput.addEventListener('keypress', (e) => {
+        // Keyboard support
+        chatInput.addEventListener('keypress', e => {
             if (e.key === 'Enter') sendMessage();
         });
 
-        // ================== INIT ==================
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (wc) wc.destroy();
+        });
+
+        // Initial status
         window.onload = () => {
-            updateButtons();
-            setStatus('Click **Start** to begin random chat');
+            setStatus('Click **Start** to join pure P2P mesh (no server)');
         };
     </script>
 </body>

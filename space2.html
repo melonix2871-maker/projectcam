@@ -26,8 +26,6 @@
     video { width: 100%; height: 100%; object-fit: cover; }
     .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.7); color: white; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; }
     .waiting-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: #ffd700; padding: 20px 40px; border-radius: 12px; font-size: 1.3rem; font-weight: 600; }
-    .controls { position: absolute; bottom: 12px; right: 12px; display: flex; gap: 6px; }
-    .btn-small { padding: 6px 12px; font-size: 0.8rem; border-radius: 9999px; background: rgba(0,0,0,0.6); color: white; border: none; }
     .chat-section { background: rgba(255,255,255,0.06); border-radius: 20px; padding: 12px; margin-top: 15px; }
     .chat-messages { height: 180px; overflow-y: auto; margin-bottom: 8px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 12px; }
     .chat-message { padding: 8px 12px; margin: 4px 0; border-radius: 12px; background: rgba(255,255,255,0.1); }
@@ -52,6 +50,12 @@
   </div>
 
   <div class="video-grid" id="videoGrid"></div>
+
+  <div class="control-bar" id="controlBar" style="display:none; margin-top:12px; background:rgba(255,255,255,0.08); padding:12px; border-radius:16px;">
+    <button id="stopBtn" class="danger-btn">⏹️ Stop</button>
+    <button id="muteBtn">🎤 Mute</button>
+    <button id="kickGuestBtn" style="background:#ff4757; color:white; display:none;">👢 Kick Guest</button>
+  </div>
 
   <div class="chat-section">
     <div style="font-weight:600; margin-bottom:8px;">💬 Live Chat</div>
@@ -88,13 +92,9 @@
   function createVideo(stream, label, muted = false) {
     const wrapper = document.createElement("div");
     wrapper.className = "video-wrapper";
-    wrapper.innerHTML = `
-      <video autoplay playsinline ${muted ? 'muted' : ''}></video>
-      <div class="video-label">${label}</div>
-    `;
+    wrapper.innerHTML = `<video autoplay playsinline ${muted ? 'muted' : ''}></video><div class="video-label">${label}</div>`;
     wrapper.querySelector("video").srcObject = stream;
     document.getElementById("videoGrid").appendChild(wrapper);
-    return wrapper;
   }
 
   function showWaiting() {
@@ -149,7 +149,6 @@
       if (myRole === "host") document.getElementById("kickGuestBtn").style.display = "inline-block";
     });
 
-    // Chat
     webConnect.onReceive((data) => {
       addChatMessage(typeof data === "string" ? data : data.text || data, false);
     });
@@ -168,6 +167,10 @@
 
     await initWebConnect();
     setStatus("Waiting for guest...");
+
+    // Attach button listeners after they exist
+    document.getElementById("kickGuestBtn").onclick = kickGuest;
+    document.getElementById("muteBtn").onclick = toggleMute;
   }
 
   async function startGuest() {
@@ -185,7 +188,7 @@
     const link = document.getElementById("shareLink");
     link.select();
     document.execCommand("copy");
-    alert("Link copied to clipboard!");
+    alert("Link copied!");
   }
 
   function kickGuest() {
@@ -195,7 +198,15 @@
     }
   }
 
-  function addChatMessage(text, isSelf) {
+  function toggleMute() {
+    if (localStream) {
+      const enabled = !localStream.getAudioTracks()[0].enabled;
+      localStream.getAudioTracks().forEach(t => t.enabled = enabled);
+      document.getElementById("muteBtn").textContent = enabled ? "🎤 Mute" : "🎤 Unmute";
+    }
+  }
+
+  function addChatMessage(text, isSelf = false) {
     const container = document.getElementById("chatMessages");
     const div = document.createElement("div");
     div.className = `chat-message ${isSelf ? "self" : ""}`;
@@ -214,7 +225,8 @@
     }
   };
 
-  // Main start
+  document.getElementById("stopBtn").onclick = () => location.reload();
+
   async function startApp() {
     if (isHost) {
       await startHost();
@@ -224,9 +236,6 @@
       document.getElementById("videoGrid").innerHTML = `<div style="color:#ff4757;text-align:center;padding:100px;font-size:1.5rem;">Not available.<br>Try again later.</div>`;
     }
   }
-
-  document.getElementById("stopBtn").onclick = () => location.reload();
-  document.getElementById("kickGuestBtn").onclick = kickGuest;
 
   startApp();
 </script>

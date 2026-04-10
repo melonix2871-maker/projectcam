@@ -118,7 +118,7 @@
         controls.querySelector('.toggle-audio').textContent = enabled ? "🎤 ON" : "🎤 OFF";
       };
 
-      // Kick button (only host)
+      // Kick Guest (only for host)
       const kickBtn = controls.querySelector('.kick-btn');
       if (kickBtn) {
         kickBtn.onclick = () => {

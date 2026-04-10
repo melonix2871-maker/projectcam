@@ -7,14 +7,14 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/webconnect/dist/esm/webconnect.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
         body { font-family: 'Inter', system-ui, sans-serif; }
         video { background: #111; border-radius: 16px; object-fit: cover; }
         .message { max-width: 78%; padding: 12px 18px; border-radius: 20px; word-break: break-word; }
-        .message.local { background: #22d3ee; color: #111; border-bottom-right-radius: 4px; }
-        .message.remote { background: #27272a; border-bottom-left-radius: 4px; }
+        .message.local { background: #22d3ee; color: #111; }
+        .message.remote { background: #27272a; }
         .room-card { transition: all 0.2s; }
         .room-card:hover { transform: scale(1.03); }
     </style>
@@ -37,13 +37,11 @@
                         <div id="headerRoomName" class="text-xs text-zinc-400"></div>
                     </div>
                 </div>
-
                 <button onclick="toggleTheme()" class="text-2xl px-3 py-2 hover:bg-zinc-800 rounded-xl">🌗</button>
-
                 <div class="flex gap-2">
-                    <button onclick="showDashboard()" class="px-5 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Discover Rooms</button>
+                    <button onclick="showDashboard()" class="px-5 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Discover</button>
                     <button onclick="showMyRoom()" class="px-5 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-medium">My Room</button>
-                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Random</button>
+                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold">▶️ Random</button>
                     <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Logout</button>
                 </div>
             </div>
@@ -52,7 +50,7 @@
 
     <!-- DASHBOARD -->
     <div id="dashboard" class="max-w-screen-2xl mx-auto p-6">
-        <input id="searchInput" type="text" placeholder="Search rooms or usernames..." 
+        <input id="searchInput" type="text" placeholder="Search rooms..." 
                class="w-full bg-zinc-900 border border-zinc-700 rounded-3xl px-6 py-4 text-lg focus:border-cyan-400 outline-none mb-8"
                onkeyup="filterRooms()">
 
@@ -63,11 +61,10 @@
     <div id="videoView" class="hidden max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
-                <!-- Local Video (cam1) -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
-                        <span id="localName">cam1 - You</span>
+                        <span id="localName">You (cam1)</span>
                     </div>
                     <div class="absolute bottom-6 left-6 flex gap-3">
                         <button onclick="toggleCamera()" id="camBtn" class="bg-black/70 px-6 py-3 rounded-3xl text-sm">📷 ON</button>
@@ -75,23 +72,17 @@
                     </div>
                 </div>
 
-                <!-- Remote Video (cam2) -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
                     <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium bg-black/70">
                         Waiting for peer...
                     </div>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">cam2 - Stranger</div>
-                    
-                    <button onclick="kickPeer()" id="kickBtn" 
-                            class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">
-                        Kick Peer
-                    </button>
+                    <button onclick="kickPeer()" id="kickBtn" class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">Kick Peer</button>
                 </div>
             </div>
         </div>
 
-        <!-- Chat -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
             <div class="p-5 border-b border-zinc-700 font-medium">P2P Chat</div>
             <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-zinc-950"></div>
@@ -175,12 +166,12 @@
     </div>
 
     <script>
+        // GunDB Setup
         const gun = Gun({
             peers: [
                 'https://gun-manhattan.herokuapp.com/gun',
                 'https://gunjs.herokuapp.com/gun',
-                'https://relay.peer.ooo/gun',
-                'https://gun-relay.herokuapp.com/gun'
+                'https://relay.peer.ooo/gun'
             ]
         });
         const userGun = gun.user();
@@ -191,7 +182,6 @@
         window.isRegisterMode = false;
         window.avatarBase64 = null;
         window.isOwner = false;
-        window.activeRoomKey = null;
 
         const doorbell = new Audio('https://freesound.org/data/previews/276/276951_5123854-lq.mp3');
 
@@ -205,7 +195,7 @@
             document.getElementById('toggleBtn').textContent = window.isRegisterMode ? "Back to Login" : "Create new account";
         }
 
-        async function handleAuth() {
+        function handleAuth() {
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value.trim();
 
@@ -220,7 +210,11 @@
                 if (!securityQ) return alert("Security question is required");
 
                 userGun.create(username, password, ack => {
-                    if (ack.err) return alert(ack.err);
+                    if (ack.err) {
+                        if (ack.err.includes("already")) alert("Username already taken. Try logging in.");
+                        else alert(ack.err);
+                        return;
+                    }
                     userGun.auth(username, password, () => {
                         const data = {
                             username,
@@ -264,7 +258,7 @@
             gun.get(`users/${username}`).once(data => {
                 if (!data) return alert("User not found");
                 const answer = prompt(data.securityQuestion + "\n\nEnter your answer:");
-                if (answer) alert("Demo mode - remember your password.");
+                if (answer) alert("If the answer is correct, you can reset your password in a real app.");
             });
         }
 
@@ -281,7 +275,7 @@
 
         function showProfile() {
             if (!window.currentUser) return;
-            alert(`👤 ${window.currentUser.username}\nRoom: ${window.currentUser.roomName}\nIntro: ${window.currentUser.intro || 'None'}`);
+            alert(`Username: ${window.currentUser.username}\nRoom: ${window.currentUser.roomName}\nIntro: ${window.currentUser.intro || 'None'}`);
         }
 
         function logout() {
@@ -294,7 +288,7 @@
             }
         }
 
-        // ================== ROOMS GRID ==================
+        // Load Rooms
         function loadRooms() {
             const grid = document.getElementById('roomsGrid');
             grid.innerHTML = '';
@@ -349,7 +343,7 @@
             document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
         }
 
-        // ================== JOIN ROOM WITH URL PARAMS ==================
+        // Join Room
         async function startLocalStream() {
             if (window.localStream) return;
             window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -358,21 +352,15 @@
 
         async function joinRoom(hostKey) {
             await startLocalStream();
-            window.activeRoomKey = hostKey;
             window.isOwner = (hostKey === window.currentUser.username);
 
-            const roomId = `projectcam-room-${hostKey}`;
-            window.wc = new WebConnect({ room: roomId });
+            window.wc = new WebConnect({ room: `projectcam-room-${hostKey}` });
 
-            // Update URL with parameters
-            updateURLParams(hostKey);
-
-            window.wc.on('peer-joined', (peer) => {
+            window.wc.on('peer-joined', () => {
                 doorbell.play();
                 document.getElementById('remotePlaceholder').style.display = 'none';
-                document.getElementById('remoteName').textContent = `cam2 - ${peer.id ? peer.id.slice(0,8) : 'Guest'}`;
+                document.getElementById('remoteName').textContent = "cam2 - Guest";
                 document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
-
                 if (window.isOwner) gun.get(`users/${hostKey}`).put({ status: "occupied" });
             });
 
@@ -393,14 +381,6 @@
             window.wc.addStream(window.localStream);
 
             showMyRoom();
-        }
-
-        function updateURLParams(hostKey) {
-            const url = new URL(window.location);
-            url.searchParams.set('room', hostKey);
-            url.searchParams.set('cam1', window.currentUser.username);
-            url.searchParams.set('cam2', 'guest');
-            window.history.replaceState({}, '', url);
         }
 
         async function startRandom() {
@@ -477,6 +457,7 @@
             document.documentElement.classList.toggle('dark');
         }
 
+        // Initialize
         window.onload = () => {
             document.getElementById('authModal').style.display = 'flex';
         };

@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webconnect/dist/esm/webconnect.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
         body { font-family: 'Inter', system-ui, sans-serif; }
@@ -41,22 +41,21 @@
                 <button onclick="toggleTheme()" class="text-2xl px-3 py-2 hover:bg-zinc-800 rounded-xl">🌗</button>
 
                 <div class="flex gap-2">
-                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Start Random</button>
-                    <button onclick="stopConnection()" id="btnStop" disabled class="px-7 py-3 bg-red-500 hover:bg-red-600 rounded-3xl font-semibold flex items-center gap-2">⏹️ Stop</button>
-                    <button onclick="nextPeer()" id="btnNext" disabled class="px-7 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-semibold flex items-center gap-2">⏭️ Next</button>
+                    <button onclick="showDashboard()" class="px-5 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Discover Rooms</button>
+                    <button onclick="showMyRoom()" id="myRoomBtn" class="px-5 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-medium">My Room</button>
+                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Random</button>
                     <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Logout</button>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- DASHBOARD -->
+    <!-- DASHBOARD (Rooms Grid) -->
     <div id="dashboard" class="max-w-screen-2xl mx-auto p-6">
-        <div class="mb-8">
-            <input id="searchInput" type="text" placeholder="Search rooms or usernames..." 
-                   class="w-full bg-zinc-900 border border-zinc-700 rounded-3xl px-6 py-4 text-lg focus:border-cyan-400 outline-none"
-                   onkeyup="filterRooms()">
-        </div>
+        <input id="searchInput" type="text" placeholder="Search rooms or usernames..." 
+               class="w-full bg-zinc-900 border border-zinc-700 rounded-3xl px-6 py-4 text-lg focus:border-cyan-400 outline-none mb-8"
+               onkeyup="filterRooms()">
+
         <div id="roomsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
     </div>
 
@@ -64,6 +63,7 @@
     <div id="videoView" class="hidden max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
+                <!-- Local -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
@@ -74,18 +74,27 @@
                         <button onclick="toggleMic()" id="micBtn" class="bg-black/70 px-6 py-3 rounded-3xl text-sm">🎤 ON</button>
                     </div>
                 </div>
+
+                <!-- Remote -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
+                    <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium">
+                        Waiting for peer...
+                    </div>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">Stranger</div>
+                    
+                    <!-- Owner Kick Button -->
+                    <button onclick="kickPeer()" id="kickBtn" 
+                            class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">
+                        Kick Peer
+                    </button>
                 </div>
             </div>
         </div>
 
+        <!-- Chat -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
-            <div class="p-5 border-b border-zinc-700 font-medium flex justify-between">
-                <span>P2P Chat</span>
-                <span id="chatStatus" class="text-xs bg-zinc-800 px-4 py-1 rounded-full">Waiting...</span>
-            </div>
+            <div class="p-5 border-b border-zinc-700 font-medium">P2P Chat</div>
             <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-zinc-950"></div>
             <div class="p-5 border-t border-zinc-700">
                 <div class="flex gap-3">
@@ -168,9 +177,7 @@
 
     <script>
         // GunDB Setup
-        const gun = Gun({
-            peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://gunjs.herokuapp.com/gun']
-        });
+        const gun = Gun({ peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://gunjs.herokuapp.com/gun'] });
         const user = gun.user();
 
         window.currentUser = null;
@@ -178,12 +185,12 @@
         window.localStream = null;
         window.isRegisterMode = false;
         window.avatarBase64 = null;
+        window.isOwner = false;           // true if current user is owner of active room
+        window.activeRoomKey = null;
 
         const doorbell = new Audio('https://freesound.org/data/previews/276/276951_5123854-lq.mp3');
 
-        function hash(str) {
-            return btoa(str + "projectcam_salt_2026");
-        }
+        function hash(str) { return btoa(str + "projectcam_salt_2026"); }
 
         function toggleRegister() {
             window.isRegisterMode = !window.isRegisterMode;
@@ -197,7 +204,7 @@
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value.trim();
 
-            if (!username || !password) return alert("Username and password are required");
+            if (!username || !password) return alert("Username and password required");
 
             if (window.isRegisterMode) {
                 const roomName = document.getElementById('roomName').value.trim() || username + "'s Room";
@@ -207,27 +214,19 @@
 
                 if (!securityQ) return alert("Security question is required");
 
-                user.create(username, password, (ack) => {
+                user.create(username, password, ack => {
                     if (ack.err) return alert(ack.err);
                     user.auth(username, password, () => {
-                        const userData = {
-                            username,
-                            avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
-                            gender,
-                            roomName,
-                            intro,
-                            securityQuestion: securityQ,
-                            created: Date.now()
-                        };
-                        gun.get(`users/${username}`).put(userData);
-                        window.currentUser = userData;
+                        const data = { username, avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80", gender, roomName, intro, securityQuestion: securityQ, created: Date.now() };
+                        gun.get(`users/${username}`).put(data);
+                        window.currentUser = data;
                         finishLogin();
                     });
                 });
             } else {
-                user.auth(username, password, (ack) => {
+                user.auth(username, password, ack => {
                     if (ack.err) return alert("Incorrect username or password");
-                    gun.get(`users/${username}`).once((data) => {
+                    gun.get(`users/${username}`).once(data => {
                         window.currentUser = data || { username };
                         finishLogin();
                     });
@@ -248,10 +247,10 @@
         function showForgotPassword() {
             const username = prompt("Enter your username:");
             if (!username) return;
-            gun.get(`users/${username}`).once((data) => {
-                if (!data || !data.securityQuestion) return alert("No recovery data found.");
+            gun.get(`users/${username}`).once(data => {
+                if (!data) return alert("User not found");
                 const answer = prompt(data.securityQuestion + "\n\nEnter your answer:");
-                if (answer) alert("Demo mode: If correct, you can reset your password.");
+                if (answer) alert("Demo mode - remember your password.");
             });
         }
 
@@ -272,7 +271,7 @@
         }
 
         function logout() {
-            if (confirm("Logout from Projectcam?")) {
+            if (confirm("Logout?")) {
                 stopConnection();
                 document.getElementById('headerRight').classList.add('hidden');
                 document.getElementById('authModal').style.display = 'flex';
@@ -282,13 +281,11 @@
         }
 
         // ================== ROOMS GRID ==================
-        async function loadRooms() {
+        function loadRooms() {
             const grid = document.getElementById('roomsGrid');
             grid.innerHTML = '';
-
             gun.get('users').map().once((u, key) => {
                 if (!u || !u.roomName) return;
-
                 const card = document.createElement('div');
                 card.className = `room-card bg-zinc-900 border border-zinc-700 rounded-3xl p-5 cursor-pointer`;
                 card.innerHTML = `
@@ -317,59 +314,81 @@
             });
         }
 
-        async function joinRoom(hostKey) {
+        function showDashboard() {
+            document.getElementById('videoView').classList.add('hidden');
+            document.getElementById('dashboard').style.display = 'block';
+        }
+
+        function showMyRoom() {
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('videoView').classList.remove('hidden');
+            document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
+        }
 
+        // ================== JOIN / VIDEO ==================
+        async function startLocalStream() {
+            if (window.localStream) return;
+            window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = window.localStream;
+        }
+
+        async function joinRoom(hostKey) {
             await startLocalStream();
+            window.activeRoomKey = hostKey;
+            window.isOwner = (hostKey === window.currentUser.username);
 
             window.wc = new WebConnect({ room: `projectcam-room-${hostKey}` });
 
             window.wc.on('peer-joined', () => {
                 doorbell.play();
-                document.getElementById('chatStatus').textContent = "Connected";
+                document.getElementById('remotePlaceholder').style.display = 'none';
+                document.getElementById('remoteName').textContent = "Peer connected";
+                document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
             });
 
             window.wc.on('stream', (stream) => {
                 document.getElementById('remoteVideo').srcObject = stream;
+                document.getElementById('remotePlaceholder').style.display = 'none';
             });
 
             window.wc.on('data', (data) => addMessage(data, 'remote'));
 
             window.wc.addStream(window.localStream);
-        }
 
-        // ================== VIDEO & CHAT ==================
-        async function startLocalStream() {
-            if (window.localStream) return;
-            try {
-                window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                document.getElementById('localVideo').srcObject = window.localStream;
-            } catch (e) {
-                alert("Camera and microphone permission required");
-            }
+            showMyRoom();
         }
 
         async function startRandom() {
-            document.getElementById('dashboard').style.display = 'none';
-            document.getElementById('videoView').classList.remove('hidden');
             await startLocalStream();
+            window.isOwner = false;
             window.wc = new WebConnect({ room: 'projectcam-public-random' });
             window.wc.on('peer-joined', () => doorbell.play());
-            window.wc.on('stream', (stream) => document.getElementById('remoteVideo').srcObject = stream);
+            window.wc.on('stream', (stream) => {
+                document.getElementById('remoteVideo').srcObject = stream;
+                document.getElementById('remotePlaceholder').style.display = 'none';
+            });
             window.wc.on('data', (data) => addMessage(data, 'remote'));
             window.wc.addStream(window.localStream);
+            showMyRoom();
         }
 
         function stopConnection() {
             if (window.wc) window.wc.destroy();
             window.wc = null;
             document.getElementById('remoteVideo').srcObject = null;
-            document.getElementById('videoView').classList.add('hidden');
-            document.getElementById('dashboard').style.display = 'block';
-            document.getElementById('btnStart').disabled = false;
-            document.getElementById('btnStop').disabled = true;
-            document.getElementById('btnNext').disabled = true;
+            document.getElementById('remotePlaceholder').style.display = 'flex';
+            document.getElementById('kickBtn').classList.add('hidden');
+        }
+
+        function kickPeer() {
+            if (window.wc && confirm("Kick this peer?")) {
+                window.wc.destroy();
+                window.wc = null;
+                document.getElementById('remoteVideo').srcObject = null;
+                document.getElementById('remotePlaceholder').style.display = 'flex';
+                document.getElementById('kickBtn').classList.add('hidden');
+                addMessage("You kicked the peer", "local");
+            }
         }
 
         function nextPeer() {
@@ -413,7 +432,7 @@
             document.documentElement.classList.toggle('dark');
         }
 
-        // Initialize
+        // Init
         window.onload = () => {
             document.getElementById('authModal').style.display = 'flex';
         };

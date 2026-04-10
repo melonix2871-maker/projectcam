@@ -13,7 +13,8 @@
       background: radial-gradient(circle at 30% 20%, #0a0a1a, #020208);
       color: #f0f0f0;
       font-family: 'Inter', system-ui, sans-serif;
-      height: 100dvh;     
+      height: 100dvh;
+      overflow: hidden;
     }
     .container { max-width: 1480px; margin: 0 auto; padding: 12px; height: 100dvh; display: flex; flex-direction: column; }
     h1 { text-align: center; font-size: clamp(1.8rem, 5vw, 2.8rem); background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -21,24 +22,11 @@
     .room-badge { background: #ff6b6b; color: #fff; padding: 4px 14px; border-radius: 9999px; font-weight: 600; }
     .share-box { background: rgba(255,255,255,0.1); padding: 14px; border-radius: 12px; margin: 12px 0; text-align: center; }
     .video-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
-    .video-wrapper { 
-      background: #111; border-radius: 20px; overflow: hidden; position: relative; aspect-ratio: 16/9; 
-    }
+    .video-wrapper { background: #111; border-radius: 20px; overflow: hidden; position: relative; aspect-ratio: 16/9; }
     video { width: 100%; height: 100%; object-fit: cover; }
-    .video-label { 
-      position: absolute; bottom: 12px; left: 12px; 
-      background: rgba(0,0,0,0.7); color: white; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; 
-    }
-    .video-controls { 
-      position: absolute; bottom: 12px; right: 12px; display: flex; gap: 6px; 
-    }
-    .btn-small { 
-      padding: 6px 12px; font-size: 0.8rem; border-radius: 9999px; background: rgba(0,0,0,0.7); color: white; border: none; cursor: pointer; 
-    }
-    .waiting-label { 
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-      background: rgba(0,0,0,0.8); color: #ffd700; padding: 20px 40px; border-radius: 12px; font-size: 1.3rem; font-weight: 600; 
-    }
+    .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.7); color: white; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; }
+    .video-controls { position: absolute; bottom: 12px; right: 12px; display: flex; gap: 6px; }
+    .btn-small { padding: 6px 12px; font-size: 0.8rem; border-radius: 9999px; background: rgba(0,0,0,0.7); color: white; border: none; cursor: pointer; }
     .chat-section { background: rgba(255,255,255,0.06); border-radius: 20px; padding: 12px; margin-top: 15px; }
     .chat-messages { height: 180px; overflow-y: auto; margin-bottom: 8px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 12px; }
     .chat-message { padding: 8px 12px; margin: 4px 0; border-radius: 12px; background: rgba(255,255,255,0.1); }
@@ -84,7 +72,7 @@
 
   let webConnect = null;
   let localStream = null;
-  let myRole = null;           // "host" or "guest"
+  let myRole = null;
   let myConnectId = null;
   let remoteStreamShown = false;
   let myName = `User_${Math.random().toString(36).slice(2,6)}`;
@@ -113,6 +101,7 @@
       controls.innerHTML = `
         <button class="btn-small toggle-video">📹 ON</button>
         <button class="btn-small toggle-audio">🎤 ON</button>
+        ${myRole === "host" ? `<button class="btn-small kick-btn" style="background:#ff4757;">👢 Kick</button>` : ''}
       `;
 
       // Toggle Video
@@ -128,6 +117,17 @@
         stream.getAudioTracks().forEach(t => t.enabled = enabled);
         controls.querySelector('.toggle-audio').textContent = enabled ? "🎤 ON" : "🎤 OFF";
       };
+
+      // Kick button (only host)
+      const kickBtn = controls.querySelector('.kick-btn');
+      if (kickBtn) {
+        kickBtn.onclick = () => {
+          if (confirm("Are you sure you want to kick the guest?")) {
+            if (webConnect) webConnect.Disconnect();
+            location.reload();
+          }
+        };
+      }
     }
     return wrapper;
   }
@@ -180,7 +180,6 @@
         doorbell.play().catch(() => {});
       }
       setStatus("✅ Both connected");
-      if (myRole === "host") document.getElementById("kickGuestBtn").style.display = "inline-block";
     });
 
     webConnect.onReceive((data) => {
@@ -201,14 +200,6 @@
 
     await initWebConnect();
     setStatus("Waiting for guest...");
-
-    // Kick button for host
-    document.getElementById("kickGuestBtn").onclick = () => {
-      if (confirm("Kick the guest?")) {
-        if (webConnect) webConnect.Disconnect();
-        location.reload();
-      }
-    };
   }
 
   async function startGuest() {
@@ -230,11 +221,11 @@
   }
 
   function addChatMessage(text, isSelf = false) {
-    const prefix = myRole === "host" ? "Host: " : "Guest: ";
+    const prefix = isSelf ? "You: " : (myRole === "host" ? "Host: " : "Guest: ");
     const container = document.getElementById("chatMessages");
     const div = document.createElement("div");
     div.className = `chat-message ${isSelf ? "self" : ""}`;
-    div.textContent = (isSelf ? "You: " : prefix) + text;
+    div.textContent = prefix + text;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
   }

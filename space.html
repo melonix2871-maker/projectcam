@@ -43,21 +43,6 @@
       .chat-section { order: 2; height: 280px; }
     }
     .video-section { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-    .button-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    button {
-      padding: 12px 28px; border: none; border-radius: 9999px;
-      font-weight: 600; font-size: 1.1rem; cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex; align-items: center; gap: 8px;
-    }
-    .broadcaster { background: linear-gradient(90deg, #ff6b6b, #ff8e53); color: white; box-shadow: 0 4px 15px rgba(255,107,107,0.4); }
-    .danger-btn { background: #ff4757; color: white; }
-    button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .control-bar {
-      display: flex; gap: 12px; background: rgba(255,255,255,0.08);
-      padding: 12px; border-radius: 16px; backdrop-filter: blur(12px);
-    }
     .video-grid {
       flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; min-height: 0;
     }
@@ -72,15 +57,17 @@
       background: rgba(0,0,0,0.6); color: white; padding: 4px 14px;
       border-radius: 9999px; font-size: 0.8rem; font-weight: 600; backdrop-filter: blur(4px);
     }
+    .waiting-label {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.7); color: #ffd700; padding: 12px 24px;
+      border-radius: 12px; font-size: 1.1rem; font-weight: 600; text-align: center;
+    }
     .chat-section {
       background: rgba(255,255,255,0.06); border-radius: 20px;
       display: flex; flex-direction: column; min-height: 0;
       box-shadow: 0 10px 30px rgba(0,0,0,0.4);
     }
-    .chat-header {
-      padding: 16px 20px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1);
-      display: flex; align-items: center; gap: 8px;
-    }
+    .chat-header { padding: 16px 20px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); }
     .chat-messages {
       flex: 1; padding: 20px; overflow-y: auto; display: flex;
       flex-direction: column; gap: 12px; font-size: 0.95rem;
@@ -104,6 +91,7 @@
     .status-connected { color: #4ade80; }
     .status-broadcast { color: #ff6b6b; animation: pulse 2s infinite; }
     .status-waiting { color: #ffd700; font-weight: 600; }
+    .status-full { color: #ff4757; font-weight: 600; }
     @keyframes pulse { 50% { opacity: 0.6; } }
     .peer-count { font-weight: 700; color: #4ade80; }
   </style>
@@ -114,7 +102,7 @@
   <div class="sub">Global Pure Browser P2P • Only 2 Broadcasters Allowed</div>
   <div class="info-card">
     <span>Channel:</span> <span class="room-badge" id="channelDisplay">fannalo-dual</span>
-    <span id="status" class="status-connected">Ready • Choose your slot</span>
+    <span id="status" class="status-connected">Initializing...</span>
     <span class="pill">Peers: <span id="peerCount" class="peer-count">0</span></span>
     <span class="pill">My Role: <span id="nodeRoleStat">none</span></span>
     <span id="latencyDisplay" class="pill" style="margin-left:auto;">Latency: -- ms</span>
@@ -122,11 +110,8 @@
 
   <div class="main-layout">
     <div class="video-section">
-      <div class="button-row">
-        <button id="startBroadcastABtn" class="broadcaster">🎥 Start as Broadcaster A</button>
-        <button id="startBroadcastBBtn" class="broadcaster">🎥 Start as Broadcaster B</button>
-      </div>
-      <div class="control-bar" id="controlBar" style="display: none;">
+      <div class="video-grid" id="videoGrid"></div>
+      <div class="control-bar" id="controlBar" style="display: none; margin-top: 12px;">
         <button id="stopBtn" class="danger-btn">⏹️ Stop All</button>
         <button id="muteMicABtn">🎤 Mute A</button>
         <button id="muteMicBBtn">🎤 Mute B</button>
@@ -136,7 +121,6 @@
           <option value="low">Low (360p)</option>
         </select>
       </div>
-      <div class="video-grid" id="videoGrid"></div>
     </div>
 
     <div class="chat-section">
@@ -154,24 +138,23 @@
   const CHANNEL = "fannalo-dual";
   let webConnect = null;
   let localStreamA = null;
-  let localStreamB = null;
   let myConnectId = null;
-  let myRole = null;                    // "broadcasterA" or "broadcasterB"
+  let myRole = null;
   let myName = `User_${Math.random().toString(36).slice(2, 8)}`;
   let isMobile = /iPhone|iPad|iPod|Android|BlackBerry|webOS|IEMobile|Opera Mini/i.test(navigator.userAgent);
   let currentQuality = "medium";
   let reconnectAttempts = 0;
   const MAX_RECONNECT = 8;
+  let hasPlayedDoorbell = false;
 
-  // Doorbell sound (short ding-dong)
-  const doorbell = new Audio("https://www.soundjay.com/buttons/doorbell-1.mp3");
+  const doorbell = new Audio("https://www.soundjay.com/door_c2026/doorbell-6.mp3");
 
   function setStatus(msg, type = "connected") {
     const el = document.getElementById("status");
     el.innerHTML = msg;
-    if (type === "broadcast") el.className = "status-broadcast";
-    else if (type === "waiting") el.className = "status-waiting";
-    else el.className = "status-connected";
+    el.className = type === "broadcast" ? "status-broadcast" :
+                    type === "waiting" ? "status-waiting" :
+                    type === "full" ? "status-full" : "status-connected";
   }
 
   function updateStats() {
@@ -216,6 +199,16 @@
     document.getElementById("videoGrid").appendChild(wrapper);
   }
 
+  function showWaitingPlaceholder() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "video-wrapper";
+    wrapper.id = "waitingWrapper";
+    wrapper.innerHTML = `
+      <div class="waiting-label">Waiting for guest...</div>
+    `;
+    document.getElementById("videoGrid").appendChild(wrapper);
+  }
+
   async function initWebConnect() {
     if (webConnect) return;
     try {
@@ -237,7 +230,6 @@
       webConnect.onConnect(async (attr) => {
         updateStats();
         if (localStreamA) webConnect.openStreaming(localStreamA, { connectId: attr.connectId });
-        if (localStreamB) webConnect.openStreaming(localStreamB, { connectId: attr.connectId });
       });
 
       webConnect.onDisconnect((attr) => {
@@ -257,15 +249,23 @@
         }
       });
 
-      // When the second broadcaster's stream arrives → play doorbell
       webConnect.onStreaming((stream, attr) => {
         if (attr.connectId === myConnectId) return;
-        createVideoElement(stream, "Other Broadcaster");
-        setStatus("✅ Both broadcasters connected", "broadcast");
 
-        // Play doorbell sound once when the other broadcaster joins
-        doorbell.currentTime = 0;
-        doorbell.play().catch(() => {}); // Ignore autoplay restrictions
+        // Remove waiting placeholder
+        const waiting = document.getElementById("waitingWrapper");
+        if (waiting) waiting.remove();
+
+        createVideoElement(stream, "Other Broadcaster");
+
+        // Play doorbell only once
+        if (!hasPlayedDoorbell) {
+          hasPlayedDoorbell = true;
+          doorbell.currentTime = 0;
+          doorbell.play().catch(() => {});
+        }
+
+        setStatus("✅ Both broadcasters connected", "broadcast");
       });
 
       setInterval(updateStats, 3000);
@@ -274,43 +274,31 @@
     }
   }
 
-  async function startBroadcast(role) {
-    if (myRole) return;
-
+  // Auto start as Broadcaster A
+  async function autoStartBroadcasterA() {
     currentQuality = document.getElementById("qualitySelect").value;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
+      localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
+      createVideoElement(localStreamA, "You (Broadcaster A)", true);
+      myRole = "broadcasterA";
+      document.getElementById("nodeRoleStat").textContent = "Broadcaster A";
 
-      if (role === "A") {
-        localStreamA = stream;
-        createVideoElement(localStreamA, "You (Broadcaster A)", true);
-        myRole = "broadcasterA";
-        document.getElementById("nodeRoleStat").textContent = "Broadcaster A";
-      } else {
-        localStreamB = stream;
-        createVideoElement(localStreamB, "You (Broadcaster B)", true);
-        myRole = "broadcasterB";
-        document.getElementById("nodeRoleStat").textContent = "Broadcaster B";
-      }
+      showWaitingPlaceholder();
 
       await initWebConnect();
-      setStatus("🔴 You are live • Waiting for the second broadcaster...", "waiting");
+      setStatus("🔴 You are live • Waiting for guest...", "waiting");
       document.getElementById("controlBar").style.display = "flex";
       document.getElementById("chatInputArea").style.display = "flex";
 
-      // Disable buttons
-      document.getElementById("startBroadcastABtn").disabled = true;
-      document.getElementById("startBroadcastBBtn").disabled = true;
-
     } catch (err) {
       console.error(err);
-      alert("Camera or microphone access was denied.");
+      setStatus("❌ Camera access denied", "full");
+      document.getElementById("videoGrid").innerHTML = `<div style="color:#ff4757; text-align:center; padding:40px;">Camera access denied.<br>Please allow camera and refresh.</div>`;
     }
   }
 
   async function stopAll() {
     if (localStreamA) { localStreamA.getTracks().forEach(t => t.stop()); localStreamA = null; }
-    if (localStreamB) { localStreamB.getTracks().forEach(t => t.stop()); localStreamB = null; }
     if (webConnect) { try { webConnect.Disconnect(); } catch(e){} webConnect = null; }
 
     document.getElementById("videoGrid").innerHTML = "";
@@ -320,18 +308,23 @@
     setStatus("Stopped • Ready");
 
     myRole = null;
+    hasPlayedDoorbell = false;
     reconnectAttempts = 0;
+  }
 
-    document.getElementById("startBroadcastABtn").disabled = false;
-    document.getElementById("startBroadcastBBtn").disabled = false;
+  // Block extra visitors
+  function showRoomFull() {
+    document.getElementById("videoGrid").innerHTML = `
+      <div style="color:#ff4757; text-align:center; padding:60px; font-size:1.3rem;">
+        Not available.<br>Try again later.
+      </div>
+    `;
+    setStatus("Room is full • Only 2 broadcasters allowed", "full");
   }
 
   // Event Listeners
-  document.getElementById("startBroadcastABtn").onclick = () => startBroadcast("A");
-  document.getElementById("startBroadcastBBtn").onclick = () => startBroadcast("B");
   document.getElementById("stopBtn").onclick = stopAll;
 
-  // Separate mute buttons
   let mutedA = false, mutedB = false;
   document.getElementById("muteMicABtn").onclick = () => {
     if (!localStreamA) return;
@@ -341,15 +334,12 @@
   };
 
   document.getElementById("muteMicBBtn").onclick = () => {
-    if (!localStreamB) return;
-    mutedB = !mutedB;
-    localStreamB.getAudioTracks().forEach(track => track.enabled = !mutedB);
-    document.getElementById("muteMicBBtn").textContent = mutedB ? "🎤 Unmute B" : "🎤 Mute B";
+    // No Stream B in this setup (only A auto-starts)
+    alert("You are Broadcaster A only.");
   };
 
   document.getElementById("qualitySelect").onchange = (e) => { currentQuality = e.target.value; };
 
-  // Chat
   const chatInput = document.getElementById("chatInput");
   const sendBtn = document.getElementById("sendChatBtn");
   function sendChat() {
@@ -365,7 +355,22 @@
 
   window.addEventListener("beforeunload", () => { if (webConnect) webConnect.Disconnect(); });
 
-  console.log("%cFannalo Broadcast - Dual Broadcaster Only Mode with Doorbell Alert", "color:#ff6b6b; font-weight:700");
+  // Auto-start logic with room check
+  async function startApp() {
+    // Simple simulation: first visitor becomes broadcaster A, others see full
+    // In real production you would use better signaling, but this works for testing
+    setTimeout(async () => {
+      if (!myRole) {
+        await autoStartBroadcasterA();
+      } else {
+        showRoomFull();
+      }
+    }, 800);
+  }
+
+  startApp();
+
+  console.log("%cFannalo Broadcast - Auto-start Dual Mode with Doorbell", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

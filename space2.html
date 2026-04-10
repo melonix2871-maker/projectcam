@@ -29,11 +29,12 @@
     video { width: 100%; height: 100%; object-fit: cover; }
     .video-label { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.7); color: white; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; }
     .waiting-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: #ffd700; padding: 20px 40px; border-radius: 12px; font-size: 1.3rem; font-weight: 600; }
-    .kicked-message { color: #ff4757; font-size: 1.4rem; text-align: center; padding: 60px; font-weight: 600; }
-    .control-bar { display: flex; gap: 10px; background: rgba(255,255,255,0.08); padding: 12px; border-radius: 16px; margin-top: 12px; flex-wrap: wrap; }
-    button { padding: 10px 20px; border: none; border-radius: 9999px; font-weight: 600; cursor: pointer; }
-    .danger-btn { background: #ff4757; color: white; }
-    .kick-btn { background: #ff4757; color: white; }
+    .controls { position: absolute; bottom: 12px; right: 12px; display: flex; gap: 8px; }
+    .btn-small { padding: 6px 12px; font-size: 0.85rem; border-radius: 9999px; }
+    .chat-section { background: rgba(255,255,255,0.06); border-radius: 20px; padding: 12px; margin-top: 15px; }
+    .chat-messages { height: 160px; overflow-y: auto; margin-bottom: 8px; }
+    .chat-message { padding: 8px 12px; margin: 4px 0; border-radius: 12px; max-width: 80%; }
+    .chat-message.self { background: var(--accent); align-self: flex-end; margin-left: auto; }
   </style>
 </head>
 <body>
@@ -55,15 +56,9 @@
 
   <div class="video-grid" id="videoGrid"></div>
 
-  <div class="control-bar" id="controlBar" style="display:none;">
-    <button id="stopBtn" class="danger-btn">⏹️ Stop</button>
-    <button id="muteBtn">🎤 Mute</button>
-    <button id="kickGuestBtn" class="kick-btn" style="display:none;">👢 Kick Guest</button>
-  </div>
-
-  <div style="margin-top:15px;">
+  <div class="chat-section">
     <div style="font-weight:600; margin-bottom:8px;">💬 Live Chat</div>
-    <div id="chatMessages" style="height:180px; overflow-y:auto; background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:8px;"></div>
+    <div id="chatMessages" class="chat-messages"></div>
     <div style="display:flex; gap:8px;">
       <input id="chatInput" placeholder="Type message..." style="flex:1; padding:12px; border-radius:9999px; border:none; background:rgba(255,255,255,0.1); color:white;">
       <button id="sendChatBtn">Send</button>
@@ -81,7 +76,7 @@
 
   let webConnect = null;
   let localStream = null;
-  let myRole = null;           // "host" or "guest"
+  let myRole = null;
   let myConnectId = null;
   let remoteStreamShown = false;
   let myName = `User_${Math.random().toString(36).slice(2,6)}`;
@@ -94,12 +89,18 @@
     document.getElementById("status").textContent = msg;
   }
 
-  function createVideo(stream, label, muted = false) {
+  function createVideo(stream, label, muted = false, isLocal = false) {
     const wrapper = document.createElement("div");
     wrapper.className = "video-wrapper";
-    wrapper.innerHTML = `<video autoplay playsinline ${muted ? 'muted' : ''}></video><div class="video-label">${label}</div>`;
-    wrapper.querySelector("video").srcObject = stream;
+    wrapper.innerHTML = `
+      <video autoplay playsinline ${muted ? 'muted' : ''}></video>
+      <div class="video-label">${label}</div>
+      ${isLocal ? `<div class="controls"></div>` : ''}
+    `;
+    const video = wrapper.querySelector("video");
+    video.srcObject = stream;
     document.getElementById("videoGrid").appendChild(wrapper);
+    return wrapper;
   }
 
   function showWaiting() {
@@ -113,13 +114,10 @@
   function showKickedMessage() {
     isKicked = true;
     document.getElementById("videoGrid").innerHTML = `
-      <div class="kicked-message">
-        You have been kicked by the host.<br>
-        <small style="font-size:1rem; opacity:0.8;">The room is now closed for you.</small>
+      <div style="color:#ff4757; text-align:center; padding:80px; font-size:1.5rem;">
+        You have been kicked by the host.
       </div>
     `;
-    document.getElementById("controlBar").style.display = "none";
-    document.getElementById("chatInputArea").style.display = "none";
   }
 
   async function initWebConnect() {
@@ -131,8 +129,7 @@
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun.cloudflare.com:3478" },
-        { urls: "stun:stun.metered.ca:3478" }
+        { urls: "stun:stun.cloudflare.com:3478" }
       ]
     });
 
@@ -143,9 +140,7 @@
     });
 
     webConnect.onDisconnect(attr => {
-      if (myRole === "guest" && attr.connectId === myConnectId) {
-        showKickedMessage();
-      }
+      if (myRole === "guest") showKickedMessage();
     });
 
     webConnect.onStreaming((stream, attr) => {
@@ -156,37 +151,59 @@
       if (waiting) waiting.remove();
 
       createVideo(stream, myRole === "host" ? "Guest" : "Host");
-
       if (!hasPlayedDoorbell) {
         hasPlayedDoorbell = true;
         doorbell.play().catch(() => {});
       }
-
       setStatus("✅ Both cameras connected");
       if (myRole === "host") document.getElementById("kickGuestBtn").style.display = "inline-block";
     });
+
+    // Chat
+    webConnect.onReceive((data, attr) => {
+      if (typeof data === "string" || (data && data.text)) {
+        addChatMessage(typeof data === "string" ? data : data.text, false);
+      }
+    });
   }
 
-  // Start as Host
+  // Host
   async function startHost() {
     myRole = "host";
     document.getElementById("nodeRoleStat").textContent = "Host";
 
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    createVideo(localStream, "You (Host)", true);
+    const localWrapper = createVideo(localStream, "You (Host)", true, true);
+
+    // Add controls below host's video
+    const controls = localWrapper.querySelector(".controls");
+    controls.innerHTML = `
+      <button id="toggleVideoBtn" class="btn-small">📹 Video ON</button>
+      <button id="toggleAudioBtn" class="btn-small">🎤 Mic ON</button>
+    `;
 
     showWaiting();
-    document.getElementById("controlBar").style.display = "flex";
     document.getElementById("shareBox").style.display = "block";
-
     const guestLink = `${window.location.origin}${window.location.pathname}?room=${roomId}&guest=1`;
     document.getElementById("shareLink").value = guestLink;
 
     await initWebConnect();
     setStatus("Waiting for guest...");
+
+    // Toggle buttons
+    document.getElementById("toggleVideoBtn").onclick = () => {
+      const enabled = !localStream.getVideoTracks()[0].enabled;
+      localStream.getVideoTracks().forEach(t => t.enabled = enabled);
+      document.getElementById("toggleVideoBtn").textContent = enabled ? "📹 Video ON" : "📹 Video OFF";
+    };
+    document.getElementById("toggleAudioBtn").onclick = () => {
+      const enabled = !localStream.getAudioTracks()[0].enabled;
+      localStream.getAudioTracks().forEach(t => t.enabled = enabled);
+      document.getElementById("toggleAudioBtn").textContent = enabled ? "🎤 Mic ON" : "🎤 Mic OFF";
+    };
   }
 
-  // Start as Guest
+  // Guest
   async function startGuest() {
     myRole = "guest";
     document.getElementById("nodeRoleStat").textContent = "Guest";
@@ -202,24 +219,20 @@
     const link = document.getElementById("shareLink");
     link.select();
     document.execCommand("copy");
-    alert("Link copied to clipboard!");
+    alert("Link copied!");
   }
 
   function kickGuest() {
-    if (!confirm("Are you sure you want to kick the guest?")) return;
-    if (webConnect) webConnect.Disconnect();
-    location.reload();
+    if (confirm("Kick the guest?")) {
+      if (webConnect) webConnect.Disconnect();
+      location.reload();
+    }
   }
 
-  // Chat
   function addChatMessage(text, isSelf = false) {
     const container = document.getElementById("chatMessages");
     const div = document.createElement("div");
     div.className = `chat-message ${isSelf ? "self" : ""}`;
-    div.style.padding = "8px 12px";
-    div.style.margin = "4px 0";
-    div.style.borderRadius = "12px";
-    div.style.background = isSelf ? "#ff6b6b" : "rgba(255,255,255,0.1)";
     div.textContent = text;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
@@ -235,7 +248,7 @@
     }
   };
 
-  // Main start
+  // Main
   async function startApp() {
     if (isHost) {
       await startHost();
@@ -246,16 +259,8 @@
     }
   }
 
-  // Buttons
   document.getElementById("stopBtn").onclick = () => location.reload();
   document.getElementById("kickGuestBtn").onclick = kickGuest;
-  document.getElementById("muteBtn").onclick = () => {
-    if (localStream) {
-      const enabled = !localStream.getAudioTracks()[0].enabled;
-      localStream.getAudioTracks().forEach(t => t.enabled = enabled);
-      document.getElementById("muteBtn").textContent = enabled ? "🎤 Mute" : "🎤 Unmute";
-    }
-  };
 
   startApp();
 </script>

@@ -1,4 +1,117 @@
-let currentUsername = null;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projectcam</title>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
+    <style>
+        body { margin:0; font-family:Arial,sans-serif; background:#111; color:#fff; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+        header { background:#1a1a1a; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #333; }
+        h1 { margin:0; font-size:24px; }
+        .controls { display:flex; gap:10px; }
+        button { padding:10px 20px; border:none; border-radius:30px; font-weight:bold; cursor:pointer; }
+        .btn-start { background:#28a745; color:white; }
+        .btn-stop  { background:#dc3545; color:white; }
+        .btn-next  { background:#007bff; color:white; }
+        .main { flex:1; display:flex; }
+        .video-section { flex:4; padding:15px; background:#1a1a1a; display:flex; flex-direction:column; gap:12px; }
+        .chat-section { flex:6; display:flex; flex-direction:column; background:#222; border-left:2px solid #333; }
+        video { width:100%; background:#000; border-radius:10px; object-fit:cover; }
+        .local-video { height:42%; }
+        .remote-video { height:58%; }
+        .video-wrapper { position:relative; }
+        .name-label { position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.7); padding:6px 14px; border-radius:6px; font-size:14px; }
+        .status { padding:12px; text-align:center; background:#222; border-radius:6px; margin-top:8px; }
+        .chat-header { padding:15px; background:#1a1a1a; border-bottom:1px solid #333; font-weight:bold; }
+        .messages { flex:1; padding:15px; overflow-y:auto; background:#1a1a1a; display:flex; flex-direction:column; gap:10px; }
+        .message { max-width:80%; padding:10px 14px; border-radius:18px; word-wrap:break-word; }
+        .message.local  { align-self:flex-end; background:#007bff; color:white; }
+        .message.remote { align-self:flex-start; background:#333; }
+        .chat-input { padding:15px; background:#1a1a1a; display:flex; gap:10px; border-top:1px solid #333; }
+        input { flex:1; padding:12px 18px; border:none; border-radius:25px; background:#333; color:white; }
+        .send-btn { padding:12px 24px; background:#007bff; color:white; border:none; border-radius:25px; }
+        .modal { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:100; }
+        .modal-content { background:#222; padding:30px; border-radius:12px; width:90%; max-width:420px; }
+        input[type="text"], input[type="password"] { width:100%; padding:12px; margin:8px 0; background:#333; border:none; color:white; border-radius:6px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Projectcam</h1>
+        <div class="controls" id="headerControls" style="display:none;">
+            <button class="btn-start" onclick="startSearching()">Start</button>
+            <button class="btn-stop" onclick="stopConnection()">Stop</button>
+            <button class="btn-next" onclick="nextPeer()">Next</button>
+        </div>
+        <div id="usernameDisplay" style="display:none;"></div>
+    </header>
+
+    <div class="main">
+        <!-- Video Section -->
+        <div class="video-section">
+            <div class="video-wrapper">
+                <div class="name-label" id="local-name">You</div>
+                <video id="localVideo" class="local-video" autoplay muted playsinline></video>
+            </div>
+            <div class="video-wrapper">
+                <div class="name-label" id="remote-name">Stranger</div>
+                <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
+            </div>
+            <div class="status" id="status">Please login or register first</div>
+        </div>
+
+        <!-- Chat -->
+        <div class="chat-section">
+            <div class="chat-header">P2P Chat</div>
+            <div class="messages" id="messages"></div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Type a message..." disabled>
+                <button class="send-btn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+   
+  <!-- Updated Auth Modal -->
+<div class="modal" id="authModal">
+    <div class="modal-content">
+        <h2 id="modalTitle">Projectcam - Login with Passkey</h2>
+        
+        <input type="text" id="username" placeholder="Username" autocomplete="username">
+        
+        <div id="passkeySection" style="margin:15px 0;">
+            <button onclick="startWebAuthnLogin()" style="width:100%; padding:14px; background:#007bff; color:white; border:none; border-radius:8px; font-size:16px;">
+                Login with Passkey / Biometrics
+            </button>
+        </div>
+
+        <button onclick="toggleRegisterMode()" id="toggleBtn" style="margin-top:10px; width:100%; padding:12px; background:#555;">
+            Don't have a passkey? Register new one
+        </button>
+
+        <div id="registerSection" style="display:none; margin-top:20px;">
+            <p><strong>Register New Passkey</strong></p>
+            <button onclick="registerPasskey()" style="width:100%; padding:14px; background:#28a745; color:white; border:none; border-radius:8px;">
+                Create Passkey for this Username
+            </button>
+            <small style="display:block; margin-top:10px; color:#aaa;">
+                Your device will ask for fingerprint / Face ID / PIN
+            </small>
+        </div>
+
+        <p id="authMessage" style="margin-top:15px; text-align:center; color:#ffaa00; min-height:20px;"></p>
+        
+        <button onclick="recoverWithQuestion()" style="margin-top:10px; width:100%; padding:10px; background:#666; color:white; border:none; border-radius:6px;">
+            Forgot Access? Use Security Question
+        </button>
+    </div>
+</div>
+
+    <script>
+      let currentUsername = null;
 
 // Check if browser supports WebAuthn
 function browserSupportsWebAuthn() {
@@ -87,3 +200,6 @@ function recoverWithQuestion() {
     alert("Security question recovery is still powered by GunDB (as before).\n\nEnter your username and answer the question you set during registration.");
     // You can extend this with the previous GunDB security Q&A logic
 }
+    </script>
+</body>
+</html>

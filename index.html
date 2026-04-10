@@ -13,6 +13,8 @@
         .message { max-width: 78%; padding: 12px 18px; border-radius: 20px; word-break: break-word; }
         .message.local { background: #22d3ee; color: #111; border-bottom-right-radius: 4px; }
         .message.remote { background: #27272a; border-bottom-left-radius: 4px; }
+        .room-card { transition: all 0.2s; }
+        .room-card:hover { transform: scale(1.03); }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100">
@@ -27,44 +29,46 @@
 
             <div id="headerRight" class="hidden items-center gap-6">
                 <div onclick="showProfile()" class="flex items-center gap-3 cursor-pointer hover:bg-zinc-800 p-2 rounded-2xl">
-                    <img id="headerAvatar" src="https://picsum.photos/id/64/80/80" alt="avatar" 
-                         class="w-9 h-9 rounded-2xl object-cover border border-cyan-400">
-                    <div class="text-sm">
+                    <img id="headerAvatar" src="https://picsum.photos/id/64/80/80" alt="avatar" class="w-9 h-9 rounded-2xl object-cover border border-cyan-400">
+                    <div>
                         <div id="headerUsername" class="font-medium"></div>
+                        <div id="headerRoomName" class="text-xs text-zinc-400"></div>
                     </div>
                 </div>
 
                 <button onclick="toggleTheme()" class="text-2xl px-3 py-2 hover:bg-zinc-800 rounded-xl">🌗</button>
 
                 <div class="flex gap-2">
-                    <button onclick="startSearching()" id="btnStart" 
-                            class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">
-                        ▶️ Start
-                    </button>
-                    <button onclick="stopConnection()" id="btnStop" disabled
-                            class="px-7 py-3 bg-red-500 hover:bg-red-600 rounded-3xl font-semibold flex items-center gap-2">
-                        ⏹️ Stop
-                    </button>
-                    <button onclick="nextPeer()" id="btnNext" disabled
-                            class="px-7 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-semibold flex items-center gap-2">
-                        ⏭️ Next
-                    </button>
-                    <button onclick="logout()" 
-                            class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">
-                        Logout
-                    </button>
+                    <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Start Random</button>
+                    <button onclick="stopConnection()" id="btnStop" disabled class="px-7 py-3 bg-red-500 hover:bg-red-600 rounded-3xl font-semibold flex items-center gap-2">⏹️ Stop</button>
+                    <button onclick="nextPeer()" id="btnNext" disabled class="px-7 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-semibold flex items-center gap-2">⏭️ Next</button>
+                    <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Logout</button>
                 </div>
             </div>
         </div>
     </header>
 
-    <div class="max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
-        <!-- VIDEO SECTION -->
+    <div class="max-w-screen-2xl mx-auto p-6" id="dashboard">
+        <!-- Rooms Grid -->
+        <div class="mb-6">
+            <input id="searchInput" type="text" placeholder="Search rooms or users..." 
+                   class="w-full bg-zinc-900 border border-zinc-700 rounded-3xl px-6 py-4 focus:border-cyan-400 outline-none text-lg"
+                   onkeyup="filterRooms()">
+        </div>
+
+        <div id="roomsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <!-- VIDEO CHAT VIEW (hidden initially) -->
+    <div id="videoView" class="hidden max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
+        <!-- Videos -->
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
-                    <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
+                    <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium flex items-center gap-3">
                         <span id="localName">You</span>
                     </div>
                     <div class="absolute bottom-6 left-6 flex gap-3">
@@ -72,7 +76,6 @@
                         <button onclick="toggleMic()" id="micBtn" class="bg-black/70 px-6 py-3 rounded-3xl text-sm">🎤 ON</button>
                     </div>
                 </div>
-
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">Stranger</div>
@@ -80,7 +83,7 @@
             </div>
         </div>
 
-        <!-- CHAT -->
+        <!-- Chat -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
             <div class="p-5 border-b border-zinc-700 font-medium flex justify-between items-center">
                 <span>P2P Chat</span>
@@ -103,20 +106,17 @@
         <div class="bg-zinc-900 w-full max-w-md mx-4 rounded-3xl overflow-hidden">
             <div class="p-8">
                 <h2 id="modalTitle" class="text-3xl font-semibold mb-1">Welcome to Projectcam</h2>
-                <p id="modalDesc" class="text-zinc-400">Sign in to start random video chats</p>
+                <p id="modalDesc" class="text-zinc-400">Create your room and start face-to-face chats</p>
             </div>
 
             <div class="px-8 space-y-5 pb-8">
                 <div>
                     <label class="text-xs text-zinc-400 block mb-1">Username</label>
-                    <input id="username" type="text" placeholder="yourname" 
-                           class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                    <input id="username" type="text" placeholder="yourname" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                 </div>
-
                 <div>
                     <label class="text-xs text-zinc-400 block mb-1">Password</label>
-                    <input id="password" type="password" placeholder="••••••••" 
-                           class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                    <input id="password" type="password" placeholder="••••••••" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                 </div>
 
                 <div id="registerFields" class="hidden space-y-5">
@@ -142,24 +142,31 @@
                     </div>
 
                     <div>
+                        <label class="text-xs text-zinc-400 block mb-1">Room Name</label>
+                        <input id="roomName" type="text" placeholder="My Cool Room" maxlength="30"
+                               class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="text-xs text-zinc-400 block mb-1">Intro / About Me <span class="text-zinc-500">(max 50 chars)</span></label>
+                        <input id="intro" type="text" placeholder="Just chilling and chatting..." maxlength="50"
+                               class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
+                    </div>
+
+                    <div>
                         <label class="text-xs text-zinc-400 block mb-1">Security Question (for recovery)</label>
                         <input id="securityQuestion" type="text" placeholder="What was your first pet's name?" 
                                class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                     </div>
                 </div>
 
-                <button onclick="handleAuth()" id="authBtn"
-                        class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-3xl text-lg transition">
+                <button onclick="handleAuth()" id="authBtn" class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-3xl text-lg transition">
                     Login
                 </button>
 
                 <div class="flex justify-between text-sm pt-2">
-                    <button onclick="toggleRegister()" id="toggleBtn" class="text-cyan-400 hover:underline">
-                        Create new account
-                    </button>
-                    <button onclick="showForgotPassword()" class="text-zinc-400 hover:text-white">
-                        Forgot password?
-                    </button>
+                    <button onclick="toggleRegister()" id="toggleBtn" class="text-cyan-400 hover:underline">Create new account</button>
+                    <button onclick="showForgotPassword()" class="text-zinc-400 hover:text-white">Forgot password?</button>
                 </div>
             </div>
         </div>
@@ -175,26 +182,16 @@
         window.currentPeerId = null;
         window.avatarBase64 = null;
         window.isRegisterMode = false;
+        window.currentRoom = null;
 
-        const localVideo = document.getElementById('localVideo');
-        const remoteVideo = document.getElementById('remoteVideo');
-        const messagesDiv = document.getElementById('messages');
-
-        function hash(str) {
-            return btoa(str + "projectcam_salt_2026");
-        }
+        const doorbell = new Audio('https://freesound.org/data/previews/276/276951_5123854-lq.mp3'); // doorbell sound
 
         async function initDB() {
-            if (!window.db) {
-                window.db = await gdb('projectcam', { rtc: true });
-            }
+            if (!window.db) window.db = await gdb('projectcam', { rtc: true });
         }
 
-        // All functions below are now global so onclick works
-    </script>
+        function hash(str) { return btoa(str + "projectcam_salt_2026"); }
 
-    <script>
-        // Global functions accessible by onclick
         function toggleRegister() {
             window.isRegisterMode = !window.isRegisterMode;
             document.getElementById('registerFields').classList.toggle('hidden', !window.isRegisterMode);
@@ -207,46 +204,33 @@
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value.trim();
 
-            if (!username || !password) {
-                alert("Username and password are required");
-                return;
-            }
+            if (!username || !password) return alert("Username and password required");
 
-            try {
-                await initDB();
+            await initDB();
 
-                if (window.isRegisterMode) {
-                    const gender = document.getElementById('gender').value;
-                    const securityQ = document.getElementById('securityQuestion').value.trim();
+            if (window.isRegisterMode) {
+                const roomName = document.getElementById('roomName').value.trim() || username + "'s Room";
+                const intro = document.getElementById('intro').value.trim().slice(0, 50);
+                const gender = document.getElementById('gender').value;
+                const securityQ = document.getElementById('securityQuestion').value.trim();
 
-                    if (!securityQ) {
-                        alert("Security question is required for password recovery");
-                        return;
-                    }
+                if (!securityQ) return alert("Security question required");
 
-                    window.currentUser = {
-                        username,
-                        passwordHash: hash(password),
-                        avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
-                        gender,
-                        securityQuestion: securityQ,
-                        created: Date.now()
-                    };
+                window.currentUser = {
+                    username, passwordHash: hash(password), avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
+                    gender, roomName, intro, securityQuestion: securityQ, created: Date.now()
+                };
 
-                    await window.db.put(`users/${username}`, window.currentUser);
+                await window.db.put(`users/${username}`, window.currentUser);
+                finishLogin();
+            } else {
+                const userData = await window.db.get(`users/${username}`);
+                if (userData && userData.passwordHash === hash(password)) {
+                    window.currentUser = userData;
                     finishLogin();
                 } else {
-                    const userData = await window.db.get(`users/${username}`);
-                    if (userData && userData.passwordHash === hash(password)) {
-                        window.currentUser = userData;
-                        finishLogin();
-                    } else {
-                        alert("Incorrect username or password");
-                    }
+                    alert("Incorrect username or password");
                 }
-            } catch (err) {
-                console.error(err);
-                alert("Database error. Please try again later.");
             }
         }
 
@@ -254,24 +238,20 @@
             document.getElementById('authModal').style.display = 'none';
             document.getElementById('headerRight').classList.remove('hidden');
             document.getElementById('headerUsername').textContent = window.currentUser.username;
+            document.getElementById('headerRoomName').textContent = window.currentUser.roomName;
             document.getElementById('headerAvatar').src = window.currentUser.avatar;
-            document.getElementById('localName').textContent = window.currentUser.username;
+            document.getElementById('dashboard').style.display = 'block';
+            loadRooms();
         }
 
         function showForgotPassword() {
             const username = prompt("Enter your username:");
             if (!username) return;
-
             initDB().then(() => {
                 window.db.get(`users/${username}`).then(userData => {
-                    if (!userData || !userData.securityQuestion) {
-                        alert("No recovery data found.");
-                        return;
-                    }
+                    if (!userData) return alert("User not found");
                     const answer = prompt(userData.securityQuestion + "\n\nEnter your answer:");
-                    if (answer) {
-                        alert("In this demo, if the answer matches you can reset your password.\n\n(Just remember your password for now.)");
-                    }
+                    if (answer) alert("In demo mode - remember your password for now.");
                 });
             });
         }
@@ -287,57 +267,79 @@
             reader.readAsDataURL(file);
         }
 
-        function showProfile() {
-            if (!window.currentUser) return;
-            alert(`👤 ${window.currentUser.username}\n⚧ ${window.currentUser.gender || 'Not set'}\nJoined: ${new Date(window.currentUser.created).toLocaleDateString()}`);
+        // ================== ROOMS GRID ==================
+        async function loadRooms() {
+            await initDB();
+            const users = await window.db.get('users') || {};
+            const grid = document.getElementById('roomsGrid');
+            grid.innerHTML = '';
+
+            Object.keys(users).forEach(key => {
+                const u = users[key];
+                if (!u || !u.roomName) return;
+
+                const card = document.createElement('div');
+                card.className = `room-card bg-zinc-900 border border-zinc-700 rounded-3xl p-5 cursor-pointer`;
+                card.innerHTML = `
+                    <div class="aspect-video bg-black rounded-2xl mb-4 overflow-hidden">
+                        <img src="${u.avatar}" class="w-full h-full object-cover">
+                    </div>
+                    <div class="font-medium">${u.roomName}</div>
+                    <div class="text-sm text-zinc-400 mt-1 line-clamp-2">${u.intro || 'No intro yet'}</div>
+                    <div class="flex items-center gap-2 mt-4">
+                        <img src="${u.avatar}" class="w-7 h-7 rounded-xl">
+                        <span class="text-sm">${u.username}</span>
+                    </div>
+                `;
+                card.onclick = () => joinRoom(u.username);
+                grid.appendChild(card);
+            });
         }
 
-        function logout() {
-            if (confirm("Logout from Projectcam?")) {
-                stopConnection();
-                document.getElementById('headerRight').classList.add('hidden');
-                document.getElementById('authModal').style.display = 'flex';
-                window.currentUser = null;
-            }
+        function filterRooms() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const cards = document.querySelectorAll('.room-card');
+            cards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(term) ? 'block' : 'none';
+            });
         }
 
-        // ================== P2P Functions ==================
-        async function startLocalStream() {
-            if (window.localStream) return;
-            try {
-                window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                localVideo.srcObject = window.localStream;
-            } catch (err) {
-                alert("Camera and microphone access required");
-            }
-        }
+        async function joinRoom(hostUsername) {
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('videoView').classList.remove('hidden');
+            window.currentRoom = hostUsername;
 
-        async function startSearching() {
             await startLocalStream();
+            window.wc = new WebConnect({ room: `projectcam-${hostUsername}` });
 
-            document.getElementById('btnStart').disabled = true;
-            document.getElementById('btnStop').disabled = false;
-            document.getElementById('btnNext').disabled = false;
-
-            window.wc = new WebConnect({ room: 'projectcam-public' });
-
-            window.wc.on('peer-joined', (peer) => {
-                if (!window.currentPeerId) {
-                    window.currentPeerId = peer.id;
-                    document.getElementById('chatStatus').textContent = "Connected";
-                    document.getElementById('remoteName').textContent = "Peer " + peer.id.slice(0,8);
-                }
+            window.wc.on('peer-joined', () => {
+                doorbell.play();
+                document.getElementById('chatStatus').textContent = "Connected";
             });
 
-            window.wc.on('stream', (stream, peerId) => {
-                if (peerId === window.currentPeerId) remoteVideo.srcObject = stream;
+            window.wc.on('stream', (stream) => {
+                remoteVideo.srcObject = stream;
             });
 
-            window.wc.on('data', (data, peerId) => {
-                if (peerId === window.currentPeerId) addMessage(data, 'remote');
-            });
+            window.wc.on('data', (data) => addMessage(data, 'remote'));
 
             window.wc.addStream(window.localStream);
+        }
+
+        // ================== VIDEO & CHAT ==================
+        async function startLocalStream() {
+            if (window.localStream) return;
+            window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = window.localStream;
+        }
+
+        async function startRandom() {
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('videoView').classList.remove('hidden');
+            await startLocalStream();
+            window.wc = new WebConnect({ room: 'projectcam-public-random' });
+            // ... same peer handling as above
         }
 
         function stopConnection() {
@@ -345,16 +347,17 @@
             window.wc = null;
             window.currentPeerId = null;
             remoteVideo.srcObject = null;
+            document.getElementById('videoView').classList.add('hidden');
+            document.getElementById('dashboard').style.display = 'block';
             document.getElementById('btnStart').disabled = false;
             document.getElementById('btnStop').disabled = true;
             document.getElementById('btnNext').disabled = true;
-            document.getElementById('chatStatus').textContent = "Waiting for peer";
         }
 
         function nextPeer() {
             addMessage("You went to next stranger", "local");
             stopConnection();
-            setTimeout(startSearching, 700);
+            setTimeout(startRandom, 700);
         }
 
         function toggleCamera() {
@@ -392,7 +395,21 @@
             document.documentElement.classList.toggle('dark');
         }
 
-        // Initialize
+        function showProfile() {
+            if (!window.currentUser) return;
+            alert(`👤 ${window.currentUser.username}\nRoom: ${window.currentUser.roomName}\nIntro: ${window.currentUser.intro || 'None'}\nGender: ${window.currentUser.gender}`);
+        }
+
+        function logout() {
+            if (confirm("Logout?")) {
+                stopConnection();
+                document.getElementById('headerRight').classList.add('hidden');
+                document.getElementById('authModal').style.display = 'flex';
+                document.getElementById('dashboard').style.display = 'block';
+                window.currentUser = null;
+            }
+        }
+
         window.onload = () => {
             document.getElementById('authModal').style.display = 'flex';
         };

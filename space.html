@@ -133,7 +133,7 @@
   let webConnect = null;
   let localStreamA = null;
   let myConnectId = null;
-  let myRole = null;                    // "broadcasterA" = Host
+  let myRole = null;                    // "broadcasterA" = Host only
   let guestConnectId = null;
   let myName = `User_${Math.random().toString(36).slice(2, 8)}`;
   let isMobile = /iPhone|iPad|iPod|Android|BlackBerry|webOS|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -256,6 +256,8 @@
         }
 
         setStatus("✅ Both broadcasters connected", "broadcast");
+
+        // Show Kick button ONLY on the Host (first broadcaster)
         if (myRole === "broadcasterA") {
           document.getElementById("kickGuestBtn").style.display = "inline-block";
         }
@@ -268,8 +270,7 @@
   }
 
   function resetToWaiting() {
-    const grid = document.getElementById("videoGrid");
-    grid.innerHTML = "";
+    document.getElementById("videoGrid").innerHTML = "";
     if (localStreamA) createVideoElement(localStreamA, "You (Broadcaster A)", true);
     showWaitingPlaceholder();
     document.getElementById("kickGuestBtn").style.display = "none";
@@ -279,7 +280,7 @@
     hasPlayedDoorbell = false;
   }
 
-  // Auto start as Host (Broadcaster A)
+  // Auto start as Host
   async function autoStartBroadcasterA() {
     try {
       localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
@@ -300,25 +301,19 @@
     }
   }
 
-  // Kick Guest with confirmation
+  // Kick Guest (only visible and functional on Host)
   function kickGuest() {
-    if (!guestConnectId) return;
-
-    if (!confirm("Are you sure you want to kick the guest?")) {
-      return;
-    }
+    if (!guestConnectId || !confirm("Are you sure you want to kick the guest?")) return;
 
     try {
       if (webConnect) {
-        // Stop streaming to the guest
         webConnect.closeStreaming?.(localStreamA, { connectId: guestConnectId });
       }
-
       addChatMessage("You kicked the guest.", true);
       resetToWaiting();
     } catch (e) {
       console.warn("Kick failed", e);
-      resetToWaiting(); // Fallback
+      resetToWaiting();
     }
   }
 
@@ -362,7 +357,6 @@
 
   document.getElementById("qualitySelect").onchange = (e) => { currentQuality = e.target.value; };
 
-  // Chat
   const chatInput = document.getElementById("chatInput");
   const sendBtn = document.getElementById("sendChatBtn");
   function sendChat() {
@@ -391,7 +385,7 @@
 
   startApp();
 
-  console.log("%cFannalo Broadcast - Kick Guest Feature Added", "color:#ff6b6b; font-weight:700");
+  console.log("%cFannalo Broadcast - Kick Button Only on Host (Tab 1)", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

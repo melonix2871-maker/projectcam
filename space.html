@@ -133,7 +133,7 @@
   let webConnect = null;
   let localStreamA = null;
   let myConnectId = null;
-  let myRole = null;                    // "broadcasterA" = Host only
+  let myRole = null;                    // "host" or "guest"
   let guestConnectId = null;
   let myName = `User_${Math.random().toString(36).slice(2, 8)}`;
   let isMobile = /iPhone|iPad|iPod|Android|BlackBerry|webOS|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -247,7 +247,7 @@
         const waiting = document.getElementById("waitingWrapper");
         if (waiting) waiting.remove();
 
-        createVideoElement(stream, "Other Broadcaster");
+        createVideoElement(stream, myRole === "host" ? "Guest" : "Host Broadcaster");
 
         if (!hasPlayedDoorbell) {
           hasPlayedDoorbell = true;
@@ -255,10 +255,10 @@
           doorbell.play().catch(() => {});
         }
 
-        setStatus("✅ Both broadcasters connected", "broadcast");
+        setStatus("✅ Both connected", "broadcast");
 
-        // Show Kick button ONLY on the Host (first broadcaster)
-        if (myRole === "broadcasterA") {
+        // Kick button ONLY for Host
+        if (myRole === "host") {
           document.getElementById("kickGuestBtn").style.display = "inline-block";
         }
       });
@@ -281,12 +281,12 @@
   }
 
   // Auto start as Host
-  async function autoStartBroadcasterA() {
+  async function autoStartAsHost() {
     try {
       localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
-      createVideoElement(localStreamA, "You (Broadcaster A)", true);
-      myRole = "broadcasterA";
-      document.getElementById("nodeRoleStat").textContent = "Broadcaster A (Host)";
+      createVideoElement(localStreamA, "You (Broadcaster A - Host)", true);
+      myRole = "host";
+      document.getElementById("nodeRoleStat").textContent = "Host (A)";
 
       showWaitingPlaceholder();
 
@@ -301,7 +301,7 @@
     }
   }
 
-  // Kick Guest (only visible and functional on Host)
+  // Kick Guest (only Host can do this)
   function kickGuest() {
     if (!guestConnectId || !confirm("Are you sure you want to kick the guest?")) return;
 
@@ -372,11 +372,11 @@
 
   window.addEventListener("beforeunload", () => { if (webConnect) webConnect.Disconnect(); });
 
-  // Start the app
+  // Start the app - First tab becomes Host, others become Guest or see full
   async function startApp() {
     setTimeout(async () => {
       if (!myRole) {
-        await autoStartBroadcasterA();
+        await autoStartAsHost();
       } else {
         showRoomFull();
       }
@@ -385,7 +385,7 @@
 
   startApp();
 
-  console.log("%cFannalo Broadcast - Kick Button Only on Host (Tab 1)", "color:#ff6b6b; font-weight:700");
+  console.log("%cFannalo Broadcast - Host vs Guest Roles Enforced", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

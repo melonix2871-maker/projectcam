@@ -16,6 +16,7 @@
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100">
+
     <!-- HEADER -->
     <header class="bg-zinc-900 border-b border-zinc-800 py-4 sticky top-0 z-50">
         <div class="max-w-screen-2xl mx-auto px-6 flex items-center justify-between">
@@ -61,7 +62,6 @@
         <!-- VIDEO SECTION -->
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
-                <!-- Local Video -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
@@ -73,7 +73,6 @@
                     </div>
                 </div>
 
-                <!-- Remote Video -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">Stranger</div>
@@ -81,7 +80,7 @@
             </div>
         </div>
 
-        <!-- CHAT SECTION -->
+        <!-- CHAT -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
             <div class="p-5 border-b border-zinc-700 font-medium flex justify-between items-center">
                 <span>P2P Chat</span>
@@ -120,7 +119,6 @@
                            class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 focus:border-cyan-400 outline-none">
                 </div>
 
-                <!-- Register-only fields -->
                 <div id="registerFields" class="hidden space-y-5">
                     <div>
                         <label class="text-xs text-zinc-400 block mb-1">Avatar (optional)</label>
@@ -170,13 +168,13 @@
     <script type="module">
         import { gdb } from "https://cdn.jsdelivr.net/npm/genosdb@latest/dist/index.min.js";
 
-        let db = null;
-        let currentUser = null;
-        let wc = null;
-        let localStream = null;
-        let currentPeerId = null;
-        let avatarBase64 = null;
-        let isRegisterMode = false;
+        window.db = null;
+        window.currentUser = null;
+        window.wc = null;
+        window.localStream = null;
+        window.currentPeerId = null;
+        window.avatarBase64 = null;
+        window.isRegisterMode = false;
 
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
@@ -187,17 +185,22 @@
         }
 
         async function initDB() {
-            if (!db) {
-                db = await gdb('projectcam', { rtc: true });
+            if (!window.db) {
+                window.db = await gdb('projectcam', { rtc: true });
             }
         }
 
+        // All functions below are now global so onclick works
+    </script>
+
+    <script>
+        // Global functions accessible by onclick
         function toggleRegister() {
-            isRegisterMode = !isRegisterMode;
-            document.getElementById('registerFields').classList.toggle('hidden', !isRegisterMode);
-            document.getElementById('modalTitle').textContent = isRegisterMode ? "Create Account" : "Login";
-            document.getElementById('authBtn').textContent = isRegisterMode ? "Register" : "Login";
-            document.getElementById('toggleBtn').textContent = isRegisterMode ? "Back to Login" : "Create new account";
+            window.isRegisterMode = !window.isRegisterMode;
+            document.getElementById('registerFields').classList.toggle('hidden', !window.isRegisterMode);
+            document.getElementById('modalTitle').textContent = window.isRegisterMode ? "Create Account" : "Login";
+            document.getElementById('authBtn').textContent = window.isRegisterMode ? "Register" : "Login";
+            document.getElementById('toggleBtn').textContent = window.isRegisterMode ? "Back to Login" : "Create new account";
         }
 
         async function handleAuth() {
@@ -212,7 +215,7 @@
             try {
                 await initDB();
 
-                if (isRegisterMode) {
+                if (window.isRegisterMode) {
                     const gender = document.getElementById('gender').value;
                     const securityQ = document.getElementById('securityQuestion').value.trim();
 
@@ -221,21 +224,21 @@
                         return;
                     }
 
-                    currentUser = {
+                    window.currentUser = {
                         username,
                         passwordHash: hash(password),
-                        avatar: avatarBase64 || "https://picsum.photos/id/64/80/80",
+                        avatar: window.avatarBase64 || "https://picsum.photos/id/64/80/80",
                         gender,
                         securityQuestion: securityQ,
                         created: Date.now()
                     };
 
-                    await db.put(`users/${username}`, currentUser);
+                    await window.db.put(`users/${username}`, window.currentUser);
                     finishLogin();
                 } else {
-                    const userData = await db.get(`users/${username}`);
+                    const userData = await window.db.get(`users/${username}`);
                     if (userData && userData.passwordHash === hash(password)) {
-                        currentUser = userData;
+                        window.currentUser = userData;
                         finishLogin();
                     } else {
                         alert("Incorrect username or password");
@@ -243,16 +246,16 @@
                 }
             } catch (err) {
                 console.error(err);
-                alert("Database error. Please try again.");
+                alert("Database error. Please try again later.");
             }
         }
 
         function finishLogin() {
             document.getElementById('authModal').style.display = 'none';
             document.getElementById('headerRight').classList.remove('hidden');
-            document.getElementById('headerUsername').textContent = currentUser.username;
-            document.getElementById('headerAvatar').src = currentUser.avatar;
-            document.getElementById('localName').textContent = currentUser.username;
+            document.getElementById('headerUsername').textContent = window.currentUser.username;
+            document.getElementById('headerAvatar').src = window.currentUser.avatar;
+            document.getElementById('localName').textContent = window.currentUser.username;
         }
 
         function showForgotPassword() {
@@ -260,7 +263,7 @@
             if (!username) return;
 
             initDB().then(() => {
-                db.get(`users/${username}`).then(userData => {
+                window.db.get(`users/${username}`).then(userData => {
                     if (!userData || !userData.securityQuestion) {
                         alert("No recovery data found.");
                         return;
@@ -278,15 +281,15 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = e => {
-                avatarBase64 = e.target.result;
-                document.getElementById('previewAvatar').src = avatarBase64;
+                window.avatarBase64 = e.target.result;
+                document.getElementById('previewAvatar').src = window.avatarBase64;
             };
             reader.readAsDataURL(file);
         }
 
         function showProfile() {
-            if (!currentUser) return;
-            alert(`👤 ${currentUser.username}\n⚧ ${currentUser.gender || 'Not set'}\nJoined: ${new Date(currentUser.created).toLocaleDateString()}`);
+            if (!window.currentUser) return;
+            alert(`👤 ${window.currentUser.username}\n⚧ ${window.currentUser.gender || 'Not set'}\nJoined: ${new Date(window.currentUser.created).toLocaleDateString()}`);
         }
 
         function logout() {
@@ -294,18 +297,18 @@
                 stopConnection();
                 document.getElementById('headerRight').classList.add('hidden');
                 document.getElementById('authModal').style.display = 'flex';
-                currentUser = null;
+                window.currentUser = null;
             }
         }
 
-        // ================== P2P Video Chat ==================
+        // ================== P2P Functions ==================
         async function startLocalStream() {
-            if (localStream) return;
+            if (window.localStream) return;
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                localVideo.srcObject = localStream;
+                window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = window.localStream;
             } catch (err) {
-                alert("Camera and microphone access required for video chat");
+                alert("Camera and microphone access required");
             }
         }
 
@@ -316,31 +319,31 @@
             document.getElementById('btnStop').disabled = false;
             document.getElementById('btnNext').disabled = false;
 
-            wc = new WebConnect({ room: 'projectcam-public' });
+            window.wc = new WebConnect({ room: 'projectcam-public' });
 
-            wc.on('peer-joined', (peer) => {
-                if (!currentPeerId) {
-                    currentPeerId = peer.id;
+            window.wc.on('peer-joined', (peer) => {
+                if (!window.currentPeerId) {
+                    window.currentPeerId = peer.id;
                     document.getElementById('chatStatus').textContent = "Connected";
                     document.getElementById('remoteName').textContent = "Peer " + peer.id.slice(0,8);
                 }
             });
 
-            wc.on('stream', (stream, peerId) => {
-                if (peerId === currentPeerId) remoteVideo.srcObject = stream;
+            window.wc.on('stream', (stream, peerId) => {
+                if (peerId === window.currentPeerId) remoteVideo.srcObject = stream;
             });
 
-            wc.on('data', (data, peerId) => {
-                if (peerId === currentPeerId) addMessage(data, 'remote');
+            window.wc.on('data', (data, peerId) => {
+                if (peerId === window.currentPeerId) addMessage(data, 'remote');
             });
 
-            wc.addStream(localStream);
+            window.wc.addStream(window.localStream);
         }
 
         function stopConnection() {
-            if (wc) wc.destroy();
-            wc = null;
-            currentPeerId = null;
+            if (window.wc) window.wc.destroy();
+            window.wc = null;
+            window.currentPeerId = null;
             remoteVideo.srcObject = null;
             document.getElementById('btnStart').disabled = false;
             document.getElementById('btnStop').disabled = true;
@@ -355,15 +358,15 @@
         }
 
         function toggleCamera() {
-            if (!localStream) return;
-            const track = localStream.getVideoTracks()[0];
+            if (!window.localStream) return;
+            const track = window.localStream.getVideoTracks()[0];
             if (track) track.enabled = !track.enabled;
             document.getElementById('camBtn').textContent = track.enabled ? "📷 ON" : "📷 OFF";
         }
 
         function toggleMic() {
-            if (!localStream) return;
-            const track = localStream.getAudioTracks()[0];
+            if (!window.localStream) return;
+            const track = window.localStream.getAudioTracks()[0];
             if (track) track.enabled = !track.enabled;
             document.getElementById('micBtn').textContent = track.enabled ? "🎤 ON" : "🎤 OFF";
         }
@@ -371,8 +374,8 @@
         function sendMessage() {
             const input = document.getElementById('chatInput');
             const text = input.value.trim();
-            if (!text || !wc) return;
-            wc.sendData(text);
+            if (!text || !window.wc) return;
+            window.wc.sendData(text);
             addMessage(text, 'local');
             input.value = '';
         }
@@ -389,7 +392,7 @@
             document.documentElement.classList.toggle('dark');
         }
 
-        // Initialize app
+        // Initialize
         window.onload = () => {
             document.getElementById('authModal').style.display = 'flex';
         };

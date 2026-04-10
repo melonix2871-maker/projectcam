@@ -3,24 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pure P2P Video Chat - webconnect.js</title>
+    <title>Projectcam</title>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/nuzulul/webConnect.js@latest/dist/webconnect.min.js"></script>
     <style>
-        body { margin:0; font-family: Arial, sans-serif; background:#111; color:#fff; display:flex; height:100vh; overflow:hidden; }
-        .container { display:flex; width:100%; height:100%; }
+        body { margin:0; font-family:Arial,sans-serif; background:#111; color:#fff; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+        header { background:#1a1a1a; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #333; }
+        h1 { margin:0; font-size:24px; }
+        .controls { display:flex; gap:10px; }
+        button { padding:10px 20px; border:none; border-radius:30px; font-weight:bold; cursor:pointer; }
+        .btn-start { background:#28a745; color:white; }
+        .btn-stop  { background:#dc3545; color:white; }
+        .btn-next  { background:#007bff; color:white; }
+        .main { flex:1; display:flex; }
         .video-section { flex:4; padding:15px; background:#1a1a1a; display:flex; flex-direction:column; gap:12px; }
         .chat-section { flex:6; display:flex; flex-direction:column; background:#222; border-left:2px solid #333; }
         video { width:100%; background:#000; border-radius:10px; object-fit:cover; }
         .local-video { height:42%; }
         .remote-video { height:58%; }
         .video-wrapper { position:relative; }
-        .name-label { position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.7); padding:6px 14px; border-radius:6px; font-size:14px; z-index:10; }
-        .controls { display:flex; gap:12px; margin-top:15px; justify-content:center; flex-wrap:wrap; }
-        button { padding:12px 24px; font-size:16px; border:none; border-radius:30px; cursor:pointer; font-weight:bold; }
-        .btn-start { background:#28a745; color:white; }
-        .btn-stop  { background:#dc3545; color:white; }
-        .btn-next  { background:#007bff; color:white; }
-        .status { padding:12px; text-align:center; font-size:15px; background:#222; border-radius:6px; margin-top:8px; }
+        .name-label { position:absolute; top:12px; left:12px; background:rgba(0,0,0,0.7); padding:6px 14px; border-radius:6px; font-size:14px; }
+        .status { padding:12px; text-align:center; background:#222; border-radius:6px; margin-top:8px; }
         .chat-header { padding:15px; background:#1a1a1a; border-bottom:1px solid #333; font-weight:bold; }
         .messages { flex:1; padding:15px; overflow-y:auto; background:#1a1a1a; display:flex; flex-direction:column; gap:10px; }
         .message { max-width:80%; padding:10px 14px; border-radius:18px; word-wrap:break-word; }
@@ -29,33 +33,39 @@
         .chat-input { padding:15px; background:#1a1a1a; display:flex; gap:10px; border-top:1px solid #333; }
         input { flex:1; padding:12px 18px; border:none; border-radius:25px; background:#333; color:white; }
         .send-btn { padding:12px 24px; background:#007bff; color:white; border:none; border-radius:25px; }
+        .modal { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:100; }
+        .modal-content { background:#222; padding:30px; border-radius:12px; width:90%; max-width:420px; }
+        input[type="text"], input[type="password"] { width:100%; padding:12px; margin:8px 0; background:#333; border:none; color:white; border-radius:6px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Videos -->
+    <header>
+        <h1>Projectcam</h1>
+        <div class="controls" id="headerControls" style="display:none;">
+            <button class="btn-start" onclick="startSearching()">Start</button>
+            <button class="btn-stop" onclick="stopConnection()">Stop</button>
+            <button class="btn-next" onclick="nextPeer()">Next</button>
+        </div>
+        <div id="usernameDisplay" style="display:none;"></div>
+    </header>
+
+    <div class="main">
+        <!-- Video Section -->
         <div class="video-section">
             <div class="video-wrapper">
                 <div class="name-label" id="local-name">You</div>
                 <video id="localVideo" class="local-video" autoplay muted playsinline></video>
             </div>
             <div class="video-wrapper">
-                <div class="name-label" id="remote-name">Connected Peer</div>
+                <div class="name-label" id="remote-name">Stranger</div>
                 <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
             </div>
-
-            <div class="status" id="status">Click Start to join P2P mesh</div>
-
-            <div class="controls">
-                <button class="btn-start" id="btnStart" onclick="startConnection()">Start</button>
-                <button class="btn-stop"  id="btnStop"  onclick="stopConnection()" disabled>Stop</button>
-                <button class="btn-next"  id="btnNext"  onclick="nextPeer()" disabled>Next</button>
-            </div>
+            <div class="status" id="status">Please login or register first</div>
         </div>
 
         <!-- Chat -->
         <div class="chat-section">
-            <div class="chat-header">P2P Data Channel Chat</div>
+            <div class="chat-header">P2P Chat</div>
             <div class="messages" id="messages"></div>
             <div class="chat-input">
                 <input type="text" id="chatInput" placeholder="Type a message..." disabled>
@@ -64,11 +74,33 @@
         </div>
     </div>
 
+    <!-- Login / Register Modal -->
+    <div class="modal" id="authModal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Welcome to Projectcam</h2>
+            <input type="text" id="alias" placeholder="Username (alias)">
+            <input type="password" id="pass" placeholder="Passphrase">
+            <div id="registerFields" style="display:none;">
+                <input type="text" id="securityQ" placeholder="Security Question (e.g. What is your favorite color?)">
+                <input type="text" id="securityA" placeholder="Answer (used for recovery)">
+            </div>
+            <button onclick="toggleMode()" id="toggleBtn" style="margin:10px 0; width:100%; padding:12px;">Need to Register? Click here</button>
+            <button onclick="handleAuth()" id="authBtn" style="width:100%; padding:12px; background:#007bff; color:white; border:none; border-radius:6px;">Login</button>
+            <button onclick="recoverPassword()" style="margin-top:10px; width:100%; padding:10px; background:#666; color:white; border:none; border-radius:6px;">Forgot Passphrase?</button>
+            <p id="authMessage" style="margin-top:10px; text-align:center; color:#ffaa00;"></p>
+        </div>
+    </div>
+
     <script>
+        // GunDB setup (public relay peers)
+        const gun = Gun({
+            peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://gunjs.herokuapp.com/gun']
+        });
+        const user = gun.user();
+        let currentUserAlias = null;
         let wc = null;
         let localStream = null;
         let currentPeerId = null;
-        let dataChannel = null;
 
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
@@ -76,94 +108,139 @@
         const messagesEl = document.getElementById('messages');
         const chatInput = document.getElementById('chatInput');
 
+        let isRegisterMode = false;
+
+        function toggleMode() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('registerFields').style.display = isRegisterMode ? 'block' : 'none';
+            document.getElementById('modalTitle').textContent = isRegisterMode ? 'Register New User' : 'Login to Projectcam';
+            document.getElementById('authBtn').textContent = isRegisterMode ? 'Register' : 'Login';
+            document.getElementById('toggleBtn').textContent = isRegisterMode ? 'Already have account? Login' : 'Need to Register? Click here';
+        }
+
+        async function handleAuth() {
+            const alias = document.getElementById('alias').value.trim();
+            const pass = document.getElementById('pass').value.trim();
+            const messageEl = document.getElementById('authMessage');
+
+            if (!alias || !pass) {
+                messageEl.textContent = "Username and passphrase required";
+                return;
+            }
+
+            if (isRegisterMode) {
+                const q = document.getElementById('securityQ').value.trim();
+                const a = document.getElementById('securityA').value.trim();
+                if (!q || !a) {
+                    messageEl.textContent = "Security question and answer required for recovery";
+                    return;
+                }
+
+                user.create(alias, pass, (ack) => {
+                    if (ack.err) {
+                        messageEl.textContent = ack.err;
+                    } else {
+                        // Store security question encrypted
+                        user.auth(alias, pass, () => {
+                            const encAnswer = SEA.encrypt(a, pass);
+                            gun.get(`~${user.is.pub}`).get('security').put({ q, a: encAnswer });
+                            finishLogin(alias);
+                        });
+                    }
+                });
+            } else {
+                user.auth(alias, pass, (ack) => {
+                    if (ack.err) {
+                        messageEl.textContent = "Login failed. Check username/passphrase.";
+                    } else {
+                        finishLogin(alias);
+                    }
+                });
+            }
+        }
+
+        function recoverPassword() {
+            const alias = prompt("Enter your username:");
+            if (!alias) return;
+            const answer = prompt("Answer your security question:");
+            if (!answer) return;
+
+            // In real app you'd fetch the question first, but for simplicity:
+            gun.get(`~${user.is ? user.is.pub : 'unknown'}`).get('security').once(async (data) => {
+                if (!data) return alert("No recovery data found.");
+                try {
+                    const decrypted = await SEA.decrypt(data.a, answer);
+                    if (decrypted) {
+                        alert("Recovery successful! You can now login with your passphrase.");
+                    } else {
+                        alert("Wrong answer.");
+                    }
+                } catch(e) {
+                    alert("Recovery failed.");
+                }
+            });
+        }
+
+        function finishLogin(alias) {
+            currentUserAlias = alias;
+            document.getElementById('authModal').style.display = 'none';
+            document.getElementById('usernameDisplay').textContent = `Logged in as: ${alias}`;
+            document.getElementById('usernameDisplay').style.display = 'block';
+            document.getElementById('headerControls').style.display = 'flex';
+            statusEl.textContent = `Welcome ${alias}! Click Start to find peers.`;
+            // Your personal room = alias
+        }
+
         async function startLocalStream() {
             if (localStream) return;
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             localVideo.srcObject = localStream;
         }
 
-        async function startConnection() {
+        async function startSearching() {
             await startLocalStream();
-            document.getElementById('btnStart').disabled = true;
-            document.getElementById('btnStop').disabled = false;
-            document.getElementById('btnNext').disabled = false;
-            chatInput.disabled = false;
+            document.getElementById('headerControls').querySelectorAll('button').forEach(b => b.disabled = false);
 
-            setStatus('Joining P2P mesh... (webconnect.js)', '#ffaa00');
-
-            // Initialize webconnect.js - you can change room name for "rooms"
-            wc = new WebConnect({
-                room: 'omegle-like-room',     // Change this to create different "rooms"
-                // You can add more options like signaling protocols if needed
-            });
+            wc = new WebConnect({ room: `projectcam-${currentUserAlias || 'public'}` });
 
             wc.on('peer-joined', (peer) => {
-                console.log('New peer joined:', peer.id);
                 if (!currentPeerId) {
                     currentPeerId = peer.id;
-                    setStatus('Connected to peer: ' + peer.id.substring(0,8), '#28a745');
-                    // For simplicity, we take the first peer as "remote"
-                    setupPeerConnection(peer);
+                    statusEl.textContent = `Connected to ${peer.id.substring(0,8)}`;
+                    remoteVideo.srcObject = peer.stream || null; // webconnect may expose stream
                 }
             });
 
-            wc.on('peer-left', (peerId) => {
-                if (peerId === currentPeerId) {
-                    setStatus('Peer disconnected', '#ff4444');
-                    currentPeerId = null;
-                    remoteVideo.srcObject = null;
-                }
-            });
-
-            // Handle incoming media / data
             wc.on('stream', (stream, peerId) => {
-                if (peerId === currentPeerId || !remoteVideo.srcObject) {
-                    remoteVideo.srcObject = stream;
-                }
+                if (peerId === currentPeerId) remoteVideo.srcObject = stream;
             });
 
             wc.on('data', (data, peerId) => {
-                if (peerId === currentPeerId) {
-                    addMessage(data, 'remote');
-                }
+                if (peerId === currentPeerId) addMessage(data, 'remote');
             });
 
-            // Share our local stream to the mesh
             wc.addStream(localStream);
-
-            setStatus('Waiting for peers in the mesh...', '#ffaa00');
-        }
-
-        function setupPeerConnection(peer) {
-            // webconnect.js handles most of the heavy lifting
-            console.log('Setting up with peer:', peer.id);
+            statusEl.textContent = 'Looking for other users in the mesh...';
         }
 
         function stopConnection() {
-            if (wc) {
-                wc.destroy();
-                wc = null;
-            }
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            remoteVideo.srcObject = null;
+            if (wc) wc.destroy();
+            wc = null;
             currentPeerId = null;
-            resetUI();
-            setStatus('Connection stopped');
+            remoteVideo.srcObject = null;
+            statusEl.textContent = 'Connection stopped';
         }
 
         function nextPeer() {
-            addMessage('Skipping to next peer...', 'local');
+            addMessage('Skipping to next user...', 'local');
             stopConnection();
-            setTimeout(startConnection, 800);
+            setTimeout(startSearching, 800);
         }
 
         function sendMessage() {
             const text = chatInput.value.trim();
             if (!text || !wc) return;
-            wc.sendData(text);           // Broadcasts to all connected peers
+            wc.sendData(text);
             addMessage(text, 'local');
             chatInput.value = '';
         }
@@ -176,31 +253,11 @@
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        function setStatus(text, color = '#aaa') {
-            statusEl.textContent = text;
-            statusEl.style.color = color;
-        }
+        chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 
-        function resetUI() {
-            document.getElementById('btnStart').disabled = false;
-            document.getElementById('btnStop').disabled = true;
-            document.getElementById('btnNext').disabled = true;
-            chatInput.disabled = true;
-        }
-
-        // Keyboard support
-        chatInput.addEventListener('keypress', e => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', () => {
-            if (wc) wc.destroy();
-        });
-
-        // Initial status
         window.onload = () => {
-            setStatus('Click **Start** to join pure P2P mesh (no server)');
+            // Show modal on load
+            document.getElementById('authModal').style.display = 'flex';
         };
     </script>
 </body>

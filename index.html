@@ -63,10 +63,11 @@
     <div id="videoView" class="hidden max-w-screen-2xl mx-auto flex h-[calc(100vh-73px)]">
         <div class="flex-1 p-6 flex flex-col gap-6">
             <div class="grid grid-rows-2 gap-6 flex-1">
+                <!-- Local Video (cam1) -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
-                        <span id="localName">You (cam1)</span>
+                        <span id="localName">cam1 - You</span>
                     </div>
                     <div class="absolute bottom-6 left-6 flex gap-3">
                         <button onclick="toggleCamera()" id="camBtn" class="bg-black/70 px-6 py-3 rounded-3xl text-sm">📷 ON</button>
@@ -74,17 +75,23 @@
                     </div>
                 </div>
 
+                <!-- Remote Video (cam2) -->
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="remoteVideo" autoplay playsinline class="w-full h-full"></video>
                     <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium bg-black/70">
                         Waiting for peer...
                     </div>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">cam2 - Stranger</div>
-                    <button onclick="kickPeer()" id="kickBtn" class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">Kick Peer</button>
+                    
+                    <button onclick="kickPeer()" id="kickBtn" 
+                            class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">
+                        Kick Peer
+                    </button>
                 </div>
             </div>
         </div>
 
+        <!-- Chat -->
         <div class="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
             <div class="p-5 border-b border-zinc-700 font-medium">P2P Chat</div>
             <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-zinc-950"></div>
@@ -168,14 +175,12 @@
     </div>
 
     <script>
-        // GunDB with more global relays
         const gun = Gun({
             peers: [
                 'https://gun-manhattan.herokuapp.com/gun',
                 'https://gunjs.herokuapp.com/gun',
                 'https://relay.peer.ooo/gun',
-                'https://gun-relay.herokuapp.com/gun',
-                'https://gun-eu.herokuapp.com/gun'
+                'https://gun-relay.herokuapp.com/gun'
             ]
         });
         const userGun = gun.user();
@@ -359,17 +364,13 @@
             const roomId = `projectcam-room-${hostKey}`;
             window.wc = new WebConnect({ room: roomId });
 
-            // Update URL
-            const url = new URL(window.location);
-            url.searchParams.set('room', hostKey);
-            url.searchParams.set('cam1', window.currentUser.username);
-            url.searchParams.set('cam2', 'guest');
-            window.history.replaceState({}, '', url);
+            // Update URL with parameters
+            updateURLParams(hostKey);
 
-            window.wc.on('peer-joined', () => {
+            window.wc.on('peer-joined', (peer) => {
                 doorbell.play();
                 document.getElementById('remotePlaceholder').style.display = 'none';
-                document.getElementById('remoteName').textContent = "cam2 - Guest";
+                document.getElementById('remoteName').textContent = `cam2 - ${peer.id ? peer.id.slice(0,8) : 'Guest'}`;
                 document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
 
                 if (window.isOwner) gun.get(`users/${hostKey}`).put({ status: "occupied" });
@@ -392,6 +393,14 @@
             window.wc.addStream(window.localStream);
 
             showMyRoom();
+        }
+
+        function updateURLParams(hostKey) {
+            const url = new URL(window.location);
+            url.searchParams.set('room', hostKey);
+            url.searchParams.set('cam1', window.currentUser.username);
+            url.searchParams.set('cam2', 'guest');
+            window.history.replaceState({}, '', url);
         }
 
         async function startRandom() {

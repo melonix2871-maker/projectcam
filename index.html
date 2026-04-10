@@ -42,7 +42,7 @@
 
                 <div class="flex gap-2">
                     <button onclick="showDashboard()" class="px-5 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Discover Rooms</button>
-                    <button onclick="showMyRoom()" id="myRoomBtn" class="px-5 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-medium">My Room</button>
+                    <button onclick="showMyRoom()" class="px-5 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-3xl font-medium">My Room</button>
                     <button onclick="startRandom()" id="btnStart" class="px-7 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-3xl font-semibold flex items-center gap-2">▶️ Random</button>
                     <button onclick="logout()" class="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 rounded-3xl font-medium">Logout</button>
                 </div>
@@ -66,7 +66,7 @@
                 <div class="relative rounded-3xl overflow-hidden bg-black shadow-2xl">
                     <video id="localVideo" autoplay muted playsinline class="w-full h-full"></video>
                     <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium">
-                        <span id="localName">You</span>
+                        <span id="localName">You (cam1)</span>
                     </div>
                     <div class="absolute bottom-6 left-6 flex gap-3">
                         <button onclick="toggleCamera()" id="camBtn" class="bg-black/70 px-6 py-3 rounded-3xl text-sm">📷 ON</button>
@@ -79,12 +79,8 @@
                     <div id="remotePlaceholder" class="absolute inset-0 flex items-center justify-center text-zinc-400 text-xl font-medium bg-black/70">
                         Waiting for peer...
                     </div>
-                    <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">Stranger</div>
-                    
-                    <button onclick="kickPeer()" id="kickBtn" 
-                            class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">
-                        Kick Peer
-                    </button>
+                    <div class="absolute top-6 left-6 bg-black/70 px-5 py-2 rounded-2xl text-sm font-medium" id="remoteName">cam2 - Stranger</div>
+                    <button onclick="kickPeer()" id="kickBtn" class="hidden absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-2xl text-sm font-medium">Kick Peer</button>
                 </div>
             </div>
         </div>
@@ -172,7 +168,16 @@
     </div>
 
     <script>
-        const gun = Gun({ peers: ['https://gun-manhattan.herokuapp.com/gun', 'https://gunjs.herokuapp.com/gun'] });
+        // GunDB with more global relays
+        const gun = Gun({
+            peers: [
+                'https://gun-manhattan.herokuapp.com/gun',
+                'https://gunjs.herokuapp.com/gun',
+                'https://relay.peer.ooo/gun',
+                'https://gun-relay.herokuapp.com/gun',
+                'https://gun-eu.herokuapp.com/gun'
+            ]
+        });
         const userGun = gun.user();
 
         window.currentUser = null;
@@ -220,7 +225,7 @@
                             intro,
                             securityQuestion: securityQ,
                             created: Date.now(),
-                            status: "open"   // default status
+                            status: "open"
                         };
                         gun.get(`users/${username}`).put(data);
                         window.currentUser = data;
@@ -254,7 +259,7 @@
             gun.get(`users/${username}`).once(data => {
                 if (!data) return alert("User not found");
                 const answer = prompt(data.securityQuestion + "\n\nEnter your answer:");
-                if (answer) alert("Demo mode: Remember your password.");
+                if (answer) alert("Demo mode - remember your password.");
             });
         }
 
@@ -284,7 +289,7 @@
             }
         }
 
-        // ================== ROOMS GRID WITH STATUS ==================
+        // ================== ROOMS GRID ==================
         function loadRooms() {
             const grid = document.getElementById('roomsGrid');
             grid.innerHTML = '';
@@ -295,7 +300,7 @@
                 const isOpen = u.status !== "occupied";
 
                 const card = document.createElement('div');
-                card.className = `room-card bg-zinc-900 border border-zinc-700 rounded-3xl p-5 cursor-pointer`;
+                card.className = `room-card bg-zinc-900 border border-zinc-700 rounded-3xl p-5`;
                 card.innerHTML = `
                     <div class="aspect-video bg-black rounded-2xl mb-4 overflow-hidden relative">
                         <img src="${u.avatar}" class="w-full h-full object-cover">
@@ -312,8 +317,11 @@
                             <div class="text-xs text-zinc-500">${u.gender || ''}</div>
                         </div>
                     </div>
+                    <button onclick="joinRoom('${key}'); event.stopImmediatePropagation();" 
+                            class="mt-4 w-full py-3 bg-cyan-500 hover:bg-cyan-600 text-black font-semibold rounded-2xl">
+                        Open to Chat
+                    </button>
                 `;
-                card.onclick = () => joinRoom(key);
                 grid.appendChild(card);
             });
         }
@@ -336,7 +344,7 @@
             document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
         }
 
-        // ================== JOIN ROOM ==================
+        // ================== JOIN ROOM WITH URL PARAMS ==================
         async function startLocalStream() {
             if (window.localStream) return;
             window.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -348,27 +356,30 @@
             window.activeRoomKey = hostKey;
             window.isOwner = (hostKey === window.currentUser.username);
 
-            window.wc = new WebConnect({ room: `projectcam-room-${hostKey}` });
+            const roomId = `projectcam-room-${hostKey}`;
+            window.wc = new WebConnect({ room: roomId });
+
+            // Update URL
+            const url = new URL(window.location);
+            url.searchParams.set('room', hostKey);
+            url.searchParams.set('cam1', window.currentUser.username);
+            url.searchParams.set('cam2', 'guest');
+            window.history.replaceState({}, '', url);
 
             window.wc.on('peer-joined', () => {
                 doorbell.play();
                 document.getElementById('remotePlaceholder').style.display = 'none';
-                document.getElementById('remoteName').textContent = "Peer connected";
+                document.getElementById('remoteName').textContent = "cam2 - Guest";
                 document.getElementById('kickBtn').classList.toggle('hidden', !window.isOwner);
 
-                // Mark room as occupied if owner
-                if (window.isOwner) {
-                    gun.get(`users/${hostKey}`).put({ status: "occupied" });
-                }
+                if (window.isOwner) gun.get(`users/${hostKey}`).put({ status: "occupied" });
             });
 
             window.wc.on('peer-left', () => {
                 document.getElementById('remotePlaceholder').style.display = 'flex';
-                document.getElementById('remoteName').textContent = "Stranger";
+                document.getElementById('remoteName').textContent = "cam2 - Stranger";
                 document.getElementById('kickBtn').classList.add('hidden');
-                if (window.isOwner) {
-                    gun.get(`users/${hostKey}`).put({ status: "open" });
-                }
+                if (window.isOwner) gun.get(`users/${hostKey}`).put({ status: "open" });
             });
 
             window.wc.on('stream', (stream) => {
@@ -457,7 +468,6 @@
             document.documentElement.classList.toggle('dark');
         }
 
-        // Initialize
         window.onload = () => {
             document.getElementById('authModal').style.display = 'flex';
         };

@@ -110,12 +110,12 @@
 <body>
 <div class="container">
   <h1>Fannalo Broadcast</h1>
-  <div class="sub">Global Pure Browser DHT-Hop P2P • Two Broadcasters Mode</div>
+  <div class="sub">Global Pure Browser DHT-Hop P2P • Dual Broadcaster Mode</div>
   <div class="info-card">
     <span>Channel:</span> <span class="room-badge" id="channelDisplay">enticechat-live</span>
     <span id="status" class="status-connected">Ready • Choose role</span>
     <span class="pill">Peers: <span id="peerCount" class="peer-count">0</span></span>
-    <span class="pill">Role: <span id="nodeRoleStat">none</span></span>
+    <span class="pill">My Role: <span id="nodeRoleStat">none</span></span>
     <span id="latencyDisplay" class="pill" style="margin-left:auto;">Latency: -- ms</span>
   </div>
 
@@ -139,9 +139,9 @@
     </div>
 
     <div class="chat-section">
-      <div class="chat-header">💬 Live Chat <span id="chatPeerCount" style="margin-left:auto; font-size:0.8rem; opacity:0.6;"></span></div>
+      <div class="chat-header">💬 Live Chat (Broadcasters Only) <span id="chatPeerCount" style="margin-left:auto; font-size:0.8rem; opacity:0.6;"></span></div>
       <div class="chat-messages" id="chatMessages"></div>
-      <div class="chat-input-area">
+      <div class="chat-input-area" id="chatInputArea" style="display: none;">
         <input id="chatInput" class="chat-input" placeholder="Type message... (Enter to send)" />
         <button id="sendChatBtn">Send</button>
       </div>
@@ -155,19 +155,12 @@
   let localStreamA = null;
   let localStreamB = null;
   let myConnectId = null;
+  let myRole = "viewer";           // "broadcasterA", "broadcasterB", or "viewer"
   let myName = `User_${Math.random().toString(36).slice(2, 8)}`;
   let isMobile = /iPhone|iPad|iPod|Android|BlackBerry|webOS|IEMobile|Opera Mini/i.test(navigator.userAgent);
   let currentQuality = "medium";
   let reconnectAttempts = 0;
   const MAX_RECONNECT = 8;
-
-  function calculateCapacity() {
-    if (isMobile) return 2;
-    if (navigator.hardwareConcurrency >= 12) return 12;
-    if (navigator.hardwareConcurrency >= 8) return 8;
-    if (navigator.hardwareConcurrency >= 4) return 6;
-    return 4;
-  }
 
   function setStatus(msg, type = "connected") {
     const el = document.getElementById("status");
@@ -237,9 +230,9 @@
         setStatus("🌍 Connected to Global DHT-Hop Mesh", "connected");
       });
 
-      // Send local streams to new peers (if we have them)
       webConnect.onConnect(async (attr) => {
         updateStats();
+        // Send our local streams to new peers
         if (localStreamA) webConnect.openStreaming(localStreamA, { connectId: attr.connectId });
         if (localStreamB) webConnect.openStreaming(localStreamB, { connectId: attr.connectId });
       });
@@ -261,10 +254,19 @@
         }
       });
 
-      // Handle incoming streams (from the other broadcaster or viewers)
+      // Handle incoming streams - Prevent duplicate of our own streams
       webConnect.onStreaming((stream, attr) => {
-        createVideoElement(stream, `Remote • ${attr.connectId.slice(0,6)}`);
-        setStatus("✅ Receiving stream", "connected");
+        // Skip if this is our own stream coming back
+        if (attr.connectId === myConnectId) return;
+
+        // Create label based on who is sending
+        let label = `Remote • ${attr.connectId.slice(0,6)}`;
+        if (myRole === "broadcasterA" || myRole === "broadcasterB") {
+          label = "Other Broadcaster";
+        }
+
+        createVideoElement(stream, label);
+        setStatus("✅ Receiving live stream", "connected");
       });
 
       setInterval(updateStats, 3000);
@@ -281,11 +283,17 @@
     try {
       localStreamA = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
       createVideoElement(localStreamA, "You (Broadcaster A)", true);
+      
+      myRole = "broadcasterA";
+      document.getElementById("chatInputArea").style.display = "flex";
+      document.getElementById("nodeRoleStat").textContent = "Broadcaster A";
+
       await initWebConnect();
-      setStatus("🔴 Broadcasting A", "broadcast");
+      setStatus("🔴 Broadcasting A - Live", "broadcast");
       document.getElementById("controlBar").style.display = "flex";
     } catch (err) {
       console.error(err);
+      alert("Camera access denied or failed");
     }
   }
 
@@ -295,27 +303,40 @@
     try {
       localStreamB = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentQuality));
       createVideoElement(localStreamB, "You (Broadcaster B)", true);
+      
+      myRole = "broadcasterB";
+      document.getElementById("chatInputArea").style.display = "flex";
+      document.getElementById("nodeRoleStat").textContent = "Broadcaster B";
+
       await initWebConnect();
-      setStatus("🔴 Broadcasting B", "broadcast");
+      setStatus("🔴 Broadcasting B - Live", "broadcast");
       document.getElementById("controlBar").style.display = "flex";
     } catch (err) {
       console.error(err);
+      alert("Camera access denied or failed");
     }
   }
 
   async function joinViewer() {
     await stopAll();
+    myRole = "viewer";
+    document.getElementById("nodeRoleStat").textContent = "Viewer";
+    document.getElementById("chatInputArea").style.display = "none";
     await initWebConnect();
-    setStatus("👁️ Joined as Viewer – waiting for streams");
+    setStatus("👁️ Joined as Viewer", "connected");
   }
 
   async function stopAll() {
     if (localStreamA) { localStreamA.getTracks().forEach(t => t.stop()); localStreamA = null; }
     if (localStreamB) { localStreamB.getTracks().forEach(t => t.stop()); localStreamB = null; }
     if (webConnect) { try { webConnect.Disconnect(); } catch(e){} webConnect = null; }
+
     document.getElementById("videoGrid").innerHTML = "";
     document.getElementById("controlBar").style.display = "none";
+    document.getElementById("chatInputArea").style.display = "none";
+    document.getElementById("nodeRoleStat").textContent = "none";
     setStatus("Stopped • Ready");
+    myRole = "viewer";
     reconnectAttempts = 0;
   }
 
@@ -335,9 +356,11 @@
 
   document.getElementById("qualitySelect").onchange = (e) => { currentQuality = e.target.value; };
 
+  // Chat - Only broadcasters can send messages
   const chatInput = document.getElementById("chatInput");
   const sendBtn = document.getElementById("sendChatBtn");
   function sendChat() {
+    if (myRole === "viewer") return; // Block viewers from chatting
     const text = chatInput.value.trim();
     if (!text || !webConnect) return;
     webConnect.Send({ text, name: myName, ts: Date.now() }, { connectId: null });
@@ -349,7 +372,7 @@
 
   window.addEventListener("beforeunload", () => { if (webConnect) webConnect.Disconnect(); });
 
-  console.log("%cFannalo Broadcast - Dual Broadcaster Mode initialized", "color:#ff6b6b; font-weight:700");
+  console.log("%cFannalo Broadcast - Dual Broadcaster Mode (Fixed Duplicates + Broadcaster-only Chat)", "color:#ff6b6b; font-weight:700");
 </script>
 </body>
 </html>

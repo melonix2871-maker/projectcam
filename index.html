@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Random Video Chat - P2P</title>
+    <title>Omegle-style Random Video Chat</title>
     <style>
         body {
             margin: 0;
@@ -23,9 +23,9 @@
             flex: 4;
             display: flex;
             flex-direction: column;
-            padding: 10px;
+            padding: 15px;
             background: #1a1a1a;
-            gap: 10px;
+            gap: 12px;
         }
         .chat-section {
             flex: 6;
@@ -37,26 +37,53 @@
         video {
             width: 100%;
             background: #000;
-            border-radius: 8px;
+            border-radius: 10px;
             object-fit: cover;
         }
-        .local-video {
-            height: 45%;
-        }
-        .remote-video {
-            height: 55%;
-        }
-        .name-label {
-            position: absolute;
-            background: rgba(0,0,0,0.6);
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 14px;
-            margin: 8px;
-        }
+        .local-video { height: 42%; }
+        .remote-video { height: 58%; }
+
         .video-wrapper {
             position: relative;
         }
+        .name-label {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            z-index: 10;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+        button {
+            padding: 12px 28px;
+            font-size: 16px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-start { background: #28a745; color: white; }
+        .btn-stop  { background: #dc3545; color: white; }
+        .btn-next  { background: #007bff; color: white; }
+
+        .status {
+            padding: 12px;
+            text-align: center;
+            font-size: 15px;
+            background: #222;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
         .chat-header {
             padding: 15px;
             background: #1a1a1a;
@@ -78,15 +105,9 @@
             border-radius: 18px;
             word-wrap: break-word;
         }
-        .message.local {
-            align-self: flex-end;
-            background: #007bff;
-            color: white;
-        }
-        .message.remote {
-            align-self: flex-start;
-            background: #333;
-        }
+        .message.local  { align-self: flex-end; background: #007bff; color: white; }
+        .message.remote { align-self: flex-start; background: #333; }
+
         .chat-input {
             padding: 15px;
             background: #1a1a1a;
@@ -96,217 +117,285 @@
         }
         input {
             flex: 1;
-            padding: 12px;
+            padding: 12px 18px;
             border: none;
             border-radius: 25px;
             background: #333;
             color: white;
         }
-        button {
+        button.send-btn {
             padding: 12px 24px;
             background: #007bff;
             color: white;
             border: none;
             border-radius: 25px;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #0056b3;
-        }
-        .status {
-            padding: 10px;
-            text-align: center;
-            font-size: 14px;
-            background: #222;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Left: Videos -->
+        <!-- Left: Videos + Controls -->
         <div class="video-section">
             <div class="video-wrapper">
-                <div class="name-label" id="local-name">You (cam1)</div>
+                <div class="name-label" id="local-name">You</div>
                 <video id="localVideo" class="local-video" autoplay muted playsinline></video>
             </div>
             <div class="video-wrapper">
-                <div class="name-label" id="remote-name">Stranger (cam2)</div>
+                <div class="name-label" id="remote-name">Stranger</div>
                 <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
             </div>
-            <div class="status" id="status">Connecting...</div>
+
+            <div class="status" id="status">Click **Start** to find a random stranger</div>
+
+            <div class="controls">
+                <button class="btn-start" id="btnStart" onclick="startSearching()">Start</button>
+                <button class="btn-stop"  id="btnStop"  onclick="stopConnection()" disabled>Stop</button>
+                <button class="btn-next"  id="btnNext"  onclick="nextStranger()" disabled>Next</button>
+            </div>
         </div>
 
         <!-- Right: Chat -->
         <div class="chat-section">
-            <div class="chat-header">P2P Chat</div>
+            <div class="chat-header">Live P2P Chat</div>
             <div class="messages" id="messages"></div>
             <div class="chat-input">
-                <input type="text" id="chatInput" placeholder="Type a message...">
-                <button onclick="sendMessage()">Send</button>
+                <input type="text" id="chatInput" placeholder="Type a message..." disabled>
+                <button class="send-btn" onclick="sendMessage()">Send</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Get URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const roomId = urlParams.get('room') || 'default-room-' + Math.random().toString(36).substr(2, 9);
-        let cam1Name = urlParams.get('cam1') || 'You';
-        let cam2Name = urlParams.get('cam2') || 'Stranger';
-
-        document.getElementById('local-name').textContent = cam1Name;
-        document.getElementById('remote-name').textContent = cam2Name;
-
-        // WebRTC variables
-        let localStream;
-        let peerConnection;
-        let dataChannel;
-        let isInitiator = false;
-
-        const configuration = {
+        // ================== CONFIG ==================
+        const SIGNALING_URL = 'wss://your-signaling-server.com'; // ← CHANGE THIS to your own server
+        const iceConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' }
             ]
         };
 
-        // Replace with your own signaling server (WebSocket)
-        // For testing you can use a free public one or host your own tiny WS server
-        const signalingServer = 'wss://your-signaling-server.com'; // ← CHANGE THIS
-        let ws;
+        // ================== VARIABLES ==================
+        let localStream = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let socket = null;
+        let mySocketId = null;
+        let isConnected = false;
+        let isSearching = false;
 
-        async function init() {
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const chatInput = document.getElementById('chatInput');
+
+        // ================== UI HELPERS ==================
+        function updateButtons() {
+            document.getElementById('btnStart').disabled = isSearching || isConnected;
+            document.getElementById('btnStop').disabled = !isSearching && !isConnected;
+            document.getElementById('btnNext').disabled = !isConnected;
+            chatInput.disabled = !isConnected;
+        }
+
+        function setStatus(text, color = '#aaa') {
+            statusEl.textContent = text;
+            statusEl.style.color = color;
+        }
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = text;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        // ================== WEBRTC FUNCTIONS ==================
+        async function startLocalStream() {
+            if (localStream) return;
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                document.getElementById('localVideo').srcObject = localStream;
-
-                // Connect to signaling server
-                ws = new WebSocket(signalingServer);
-                
-                ws.onopen = () => {
-                    console.log('Connected to signaling server');
-                    ws.send(JSON.stringify({ type: 'join', room: roomId }));
-                    document.getElementById('status').textContent = `Joined room: ${roomId}`;
-                };
-
-                ws.onmessage = async (event) => {
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'offer') {
-                        if (!peerConnection) createPeerConnection();
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                        const answer = await peerConnection.createAnswer();
-                        await peerConnection.setLocalDescription(answer);
-                        ws.send(JSON.stringify({ type: 'answer', answer, room: roomId }));
-                    } 
-                    else if (data.type === 'answer') {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    } 
-                    else if (data.type === 'candidate') {
-                        if (peerConnection) {
-                            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                        }
-                    } 
-                    else if (data.type === 'ready') {
-                        if (!isInitiator) {
-                            isInitiator = true;
-                            createPeerConnection(true); // Start as initiator
-                        }
-                    }
-                };
-
-                ws.onclose = () => {
-                    document.getElementById('status').textContent = 'Disconnected from signaling';
-                };
+                localVideo.srcObject = localStream;
             } catch (err) {
                 console.error(err);
-                document.getElementById('status').textContent = 'Camera/mic access denied or error';
+                setStatus("Camera/Microphone access denied", "#ff4444");
             }
         }
 
-        function createPeerConnection(isOfferer = false) {
-            peerConnection = new RTCPeerConnection(configuration);
+        function createPeerConnection(isInitiator) {
+            peerConnection = new RTCPeerConnection(iceConfig);
 
-            // Add local tracks
             localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, localStream);
             });
 
-            // Remote stream
-            peerConnection.ontrack = (event) => {
-                document.getElementById('remoteVideo').srcObject = event.streams[0];
-                document.getElementById('status').textContent = 'Connected ✓';
+            peerConnection.ontrack = (e) => {
+                remoteVideo.srcObject = e.streams[0];
             };
 
-            // ICE candidates
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    ws.send(JSON.stringify({
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate && socket) {
+                    socket.send(JSON.stringify({
                         type: 'candidate',
-                        candidate: event.candidate,
-                        room: roomId
+                        candidate: e.candidate
                     }));
                 }
             };
 
-            // Data channel for chat
-            if (isOfferer) {
+            if (isInitiator) {
                 dataChannel = peerConnection.createDataChannel('chat');
                 setupDataChannel();
-            } else {
-                peerConnection.ondatachannel = (event) => {
-                    dataChannel = event.channel;
-                    setupDataChannel();
-                };
-            }
-
-            // Create offer if initiator
-            if (isOfferer) {
                 peerConnection.createOffer()
                     .then(offer => peerConnection.setLocalDescription(offer))
                     .then(() => {
-                        ws.send(JSON.stringify({
+                        socket.send(JSON.stringify({
                             type: 'offer',
-                            offer: peerConnection.localDescription,
-                            room: roomId
+                            offer: peerConnection.localDescription
                         }));
                     });
+            } else {
+                peerConnection.ondatachannel = (e) => {
+                    dataChannel = e.channel;
+                    setupDataChannel();
+                };
             }
         }
 
         function setupDataChannel() {
-            dataChannel.onopen = () => console.log('Data channel open');
-            dataChannel.onmessage = (event) => {
-                addMessage(event.data, 'remote');
+            dataChannel.onopen = () => {
+                console.log('Data channel opened');
+                isConnected = true;
+                setStatus('Connected with stranger ✓', '#28a745');
+                updateButtons();
+            };
+
+            dataChannel.onmessage = (e) => {
+                addMessage(e.data, 'remote');
+            };
+
+            dataChannel.onclose = () => {
+                isConnected = false;
+                updateButtons();
             };
         }
 
+        function closeConnection() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+            remoteVideo.srcObject = null;
+            isConnected = false;
+            updateButtons();
+        }
+
+        // ================== SIGNALING ==================
+        function connectToSignaling() {
+            socket = new WebSocket(SIGNALING_URL);
+
+            socket.onopen = () => {
+                console.log('Connected to signaling server');
+            };
+
+            socket.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'your-id') {
+                    mySocketId = msg.id;
+                }
+
+                if (msg.type === 'matched') {
+                    isSearching = false;
+                    setStatus('Matched! Establishing connection...');
+                    createPeerConnection(msg.isInitiator);
+                }
+
+                if (msg.type === 'offer') {
+                    if (!peerConnection) createPeerConnection(false);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    socket.send(JSON.stringify({ type: 'answer', answer }));
+                }
+
+                if (msg.type === 'answer') {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.answer));
+                }
+
+                if (msg.type === 'candidate') {
+                    if (peerConnection) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                    }
+                }
+
+                if (msg.type === 'peer-disconnected') {
+                    setStatus('Stranger disconnected');
+                    closeConnection();
+                    addMessage('Stranger left the chat.', 'remote');
+                }
+            };
+
+            socket.onclose = () => {
+                setStatus('Disconnected from server. Refresh page.');
+            };
+        }
+
+        // ================== BUTTON ACTIONS ==================
+        async function startSearching() {
+            await startLocalStream();
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                connectToSignaling();
+            }
+            socket.send(JSON.stringify({ type: 'find-match' }));
+            isSearching = true;
+            setStatus('Looking for a random stranger...');
+            updateButtons();
+        }
+
+        function stopConnection() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'leave' }));
+            }
+            closeConnection();
+            isSearching = false;
+            setStatus('Stopped. Click Start to find someone new.');
+            updateButtons();
+        }
+
+        function nextStranger() {
+            addMessage('You skipped to next stranger.', 'local');
+            stopConnection();
+            // Small delay then start searching again
+            setTimeout(() => {
+                startSearching();
+            }, 600);
+        }
+
         function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const text = input.value.trim();
-            if (!text || !dataChannel || dataChannel.readyState !== 'open') return;
+            if (!dataChannel || dataChannel.readyState !== 'open') return;
+            const text = chatInput.value.trim();
+            if (!text) return;
 
             dataChannel.send(text);
             addMessage(text, 'local');
-            input.value = '';
+            chatInput.value = '';
         }
 
-        function addMessage(text, type) {
-            const messagesDiv = document.getElementById('messages');
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-            msgDiv.textContent = text;
-            messagesDiv.appendChild(msgDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-
-        // Keyboard support for chat
-        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+        // Enter key support
+        chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Start everything
-        window.onload = init;
+        // ================== INIT ==================
+        window.onload = () => {
+            updateButtons();
+            setStatus('Click **Start** to begin random chat');
+        };
     </script>
 </body>
 </html>
